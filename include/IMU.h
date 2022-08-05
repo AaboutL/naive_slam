@@ -2,12 +2,15 @@
  * @Author: hanfuyong
  * @Date: 2022-07-06 16:09:15
  * @LastEditors: hanfuyong
- * @LastEditTime: 2022-07-18 23:45:37
+ * @LastEditTime: 2022-07-27 15:13:38
  * @FilePath: /naive_slam/include/IMU.h
  * @Description: 仅用于个人学习
  * 
  * Copyright (c) 2022 by hanfuyong, All Rights Reserved. 
  */
+
+#pragma once
+
 #include <iostream>
 #include <eigen3/Eigen/Eigen>
 

@@ -2,7 +2,7 @@
  * @Author: hanfuyong
  * @Date: 2022-07-05 10:39:55
  * @LastEditors: hanfuyong
- * @LastEditTime: 2022-07-06 12:18:44
+ * @LastEditTime: 2022-08-01 22:52:50
  * @FilePath: /naive_slam/src/Frame.cc
  * @Description: 仅用于个人学习
  * 
@@ -15,15 +15,34 @@ namespace Naive_SLAM{
 
 float Frame::fx, Frame::fy, Frame::cx, Frame::cy;
 
+Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpORBextractor(frame.mpORBextractor),
+                                  mvKeyPoints(frame.mvKeyPoints), mvKeyPointsUn(frame.mvKeyPointsUn), mvPoints(frame.mvPoints), mvPointsUn(frame.mvPointsUn),
+                                  mvL0KPIndices(frame.mvL0KPIndices), mDescriptions(frame.mDescriptions.clone()), mRcw(frame.mRcw.clone()), mtcw(frame.mtcw.clone()),
+                                  mRwc(frame.mRwc.clone()), mtwc(frame.mtwc.clone()), mImg(frame.mImg.clone()), mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone())
+{}
+
 Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef):
-mTimeStamp(timestamp), mpORBextractor(extractor), mK(K), mDistCoef(distCoef){
+mTimeStamp(timestamp), mpORBextractor(extractor), mK(K), mDistCoef(distCoef), mImg(img){
     fx = K.at<float>(0, 0);
     fy = K.at<float>(1, 1);
     cx = K.at<float>(0, 2);
     cy = K.at<float>(1, 2);
 
     ExtractORB(img);
+    N = mvKeyPoints.size();
     UndistortKeyPoints();
+    for (size_t i = 0; i < mvKeyPoints.size(); i++){
+        cv::KeyPoint kpt = mvKeyPoints[i];
+        if (kpt.octave == 0){
+            mvL0KPIndices.emplace_back(i);
+            mvPoints.emplace_back(mvKeyPoints[i].pt);
+            mvPointsUn.emplace_back(mvKeyPointsUn[i].pt);
+        }
+    }
+    mRcw = cv::Mat::eye(3, 3, CV_32F);
+    mtcw = cv::Mat::zeros(3, 1, CV_32F);
+    mRwc = cv::Mat::eye(3, 3, CV_32F);
+    mtwc = cv::Mat::zeros(3, 1, CV_32F);
 }
 
 void Frame::ExtractORB(const cv::Mat& img){
