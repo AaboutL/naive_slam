@@ -15,14 +15,17 @@ namespace Naive_SLAM{
 
 float Frame::fx, Frame::fy, Frame::cx, Frame::cy;
 
+
 Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpORBextractor(frame.mpORBextractor),
                                   mvKeyPoints(frame.mvKeyPoints), mvKeyPointsUn(frame.mvKeyPointsUn), mvPoints(frame.mvPoints), mvPointsUn(frame.mvPointsUn),
                                   mvL0KPIndices(frame.mvL0KPIndices), mDescriptions(frame.mDescriptions.clone()), mRcw(frame.mRcw.clone()), mtcw(frame.mtcw.clone()),
-                                  mRwc(frame.mRwc.clone()), mtwc(frame.mtwc.clone()), mImg(frame.mImg.clone()), mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone())
+                                  mRwc(frame.mRwc.clone()), mtwc(frame.mtwc.clone()), mImg(frame.mImg.clone()), mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone()),
+                                  mCellSize(frame.mCellSize), mGridRowNum(frame.mGridRowNum), mGridColNum(frame.mGridColNum), mGrid(frame.mGrid)
 {}
 
-Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef):
-mTimeStamp(timestamp), mpORBextractor(extractor), mK(K), mDistCoef(distCoef), mImg(img){
+Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
+             const int cellSize):mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
+                                 mImgWidth(img.cols), mImgHeight(img.rows), mCellSize(cellSize){
     fx = K.at<float>(0, 0);
     fy = K.at<float>(1, 1);
     cx = K.at<float>(0, 2);
@@ -39,10 +42,20 @@ mTimeStamp(timestamp), mpORBextractor(extractor), mK(K), mDistCoef(distCoef), mI
             mvPointsUn.emplace_back(mvKeyPointsUn[i].pt);
         }
     }
+
+
     mRcw = cv::Mat::eye(3, 3, CV_32F);
     mtcw = cv::Mat::zeros(3, 1, CV_32F);
     mRwc = cv::Mat::eye(3, 3, CV_32F);
     mtwc = cv::Mat::zeros(3, 1, CV_32F);
+
+    mImgWidth = mImg.cols;
+    mImgHeight = mImg.rows;
+
+    mGridColNum = int(std::ceil(mImgWidth / mCellSize));
+    mGridRowNum = int(std::ceil(mImgHeight / mCellSize));
+    mGrid = std::vector<std::vector<std::vector<std::size_t>>>(mGridRowNum, std::vector<std::vector<std::size_t>>(mGridColNum, std::vector<std::size_t>(0)));
+    AssignGrid();
 }
 
 void Frame::ExtractORB(const cv::Mat& img){
@@ -72,6 +85,21 @@ void Frame::UndistortKeyPoints(){
         kp.pt.y = mat.at<float>(i, 1);
         mvKeyPointsUn[i] = kp;
     }
+}
+
+void Frame::AssignGrid() {
+    for(int i = 0; i < N; i++){
+        cv::Point2f ptUn = mvPointsUn[i];
+        if(ptUn.x < 0 || ptUn.x >= mImgWidth || ptUn.y < 0 || ptUn.y >= mImgHeight)
+            continue;
+        int colIdx = int(ptUn.x / mCellSize);
+        int rowIdx = int(ptUn.y / mCellSize);
+        mGrid[rowIdx][colIdx].emplace_back(i);
+    }
+}
+
+std::vector<std::vector<std::vector<std::size_t>>> Frame::GetGrid() {
+    return mGrid;
 }
 
 }

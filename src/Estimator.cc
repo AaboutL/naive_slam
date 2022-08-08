@@ -12,6 +12,26 @@
 #include <queue>
 
 namespace Naive_SLAM{
+
+void DrawMatches(const cv::Mat& img1, const cv::Mat& img2, const std::vector<cv::Point2f>& points1, const std::vector<cv::Point2f>& points2){
+    int w = img1.size().width;
+    int h = img1.size().height;
+    cv::Mat imgShow(h, w * 2, CV_8UC3, cv::Scalar::all(0));
+    cv::Mat tmp;
+    cv::cvtColor(img1, tmp, cv::COLOR_GRAY2BGR);
+    tmp.copyTo(imgShow(cv::Rect(0, 0, w, h)));
+    cv::cvtColor(img2, tmp, cv::COLOR_GRAY2BGR);
+    tmp.copyTo(imgShow(cv::Rect(w, 0, w, h)));
+    cv::resize(imgShow, imgShow, imgShow.size() * 2);
+    for (size_t i = 0; i < points1.size(); i++){
+        cv::circle(imgShow, points1[i] * 2, 3, cv::Scalar(255, 0, 0));
+        cv::circle(imgShow, (points2[i] + cv::Point2f(w, 0)) * 2, 3, cv::Scalar(0, 255, 0));
+        cv::line(imgShow, points1[i] * 2, (points2[i] + cv::Point2f(w, 0)) * 2, cv::Scalar(255, 0, 0));
+    }
+    cv::imshow("match", imgShow);
+    cv::waitKey(0);
+}
+
 Estimator::Estimator(float fx, float fy, float cx, float cy, float k1, float k2, float p1, float p2):
 fx(fx), fy(fy), cx(cx), cy(cy), mState(NO_IMAGE){
     mK = cv::Mat::eye(3, 3, CV_32FC1);
@@ -47,13 +67,15 @@ mpMap(pMap), mpKeyFrameDB(pKeyFrameDB){
     mK.at<float>(1, 2) = cy;
 
     mDistCoef = cv::Mat::zeros(4, 1, CV_32FC1);
-    mDistCoef.at<float>(0, 0) = fs["Camera.k1"];;
+    mDistCoef.at<float>(0, 0) = fs["Camera.k1"];
     mDistCoef.at<float>(1, 0) = fs["Camera.k2"];
     mDistCoef.at<float>(2, 0) = fs["Camera.p1"];
     mDistCoef.at<float>(3, 0) = fs["Camera.p2"];
 
-    mpORBExtractorInit = new ORBextractor(1000, fs["level_factor"], fs["pyramid_num"], fs["FAST_th_init"], fs["FAST_th_min"]);
+    mpORBExtractorInit = new ORBextractor(300, fs["level_factor"], fs["pyramid_num"], fs["FAST_th_init"], fs["FAST_th_min"]);
     mpORBExtractor = new ORBextractor(fs["feature_num"], fs["level_factor"], fs["pyramid_num"], fs["FAST_th_init"], fs["FAST_th_min"]);
+
+    mCellSize = fs["cell_size"];
 }
 
 void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
@@ -63,14 +85,13 @@ void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
     }
 
     if (mState==NO_IMAGE){
-        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractorInit, mK, mDistCoef);
-        // mpInitKF = new KeyFrame(mCurrentFrame);
+        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractorInit, mK, mDistCoef, mCellSize);
         mState = NOT_INITIALIZED;
         mLastFrame = Frame(mCurrentFrame);
         return;
     }
     if (mState == NOT_INITIALIZED){
-        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractorInit, mK, mDistCoef);
+        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractorInit, mK, mDistCoef, mCellSize);
         bool flag = Initialize();
         if(flag){
             mLastFrame = Frame(mCurrentFrame);
@@ -82,6 +103,7 @@ void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
         return;
     }
     if(mState == OK){
+        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractor, mK, mDistCoef, mCellSize);
     }
     mLastFrame = Frame(mCurrentFrame);
 }
@@ -104,36 +126,26 @@ int Estimator::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
     return dist;
 }
 
-std::vector<int> Estimator::SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status,
-const int cellSize, const cv::Size& imgSize){
-    int kpNum = mLastFrame.mvL0KPIndices.size();
-    std::vector<int> matchIdx(kpNum, -1);
-    for (size_t i = 0; i < kpNum; i++){
-        if (!status[i]) 
-            continue;
+std::vector<int> Estimator::SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status){
+    auto curGrid = mCurrentFrame.GetGrid();
+    std::vector<int> matchIdx(mLastFrame.N, -1);
+    for (std::size_t i = 0; i < mLastFrame.N; i++){
         cv::Point2f pt = ptsLK[i];
-        int minCellX = std::max(0, (int)pt.x - cellSize);
-        int maxCellX = std::min(imgSize.width, (int)pt.x + cellSize);
-        int minCellY = std::max(0, (int)pt.y - cellSize);
-        int maxCellY = std::min(imgSize.height, (int)pt.y + cellSize);
-        // std::cout << pt << "  " << minCellX <<  " " << maxCellX << " " << minCellY << " " << maxCellY << std::endl;
+        int colIdx = pt.x / mCellSize;
+        int rowIdx = pt.y / mCellSize;
+        std::vector<std::size_t> candidatePtsIdx = curGrid[rowIdx][colIdx];
+        cv::Mat lastDesp = mLastFrame.mDescriptions.row(i);
         int bestDist = INT_MAX;
         int bestId = -1;
-        for (size_t j = 0; j < mCurrentFrame.mvKeyPoints.size(); j++){
-            cv::KeyPoint kp = mCurrentFrame.mvKeyPoints[j];
-            if (kp.octave != 0)
-                continue;
-            if (kp.pt.x < minCellX || kp.pt.x > maxCellX || kp.pt.y < minCellY || kp.pt.y > maxCellY)
-                continue;
-            cv::Mat desp = mLastFrame.mDescriptions.row(mLastFrame.mvL0KPIndices[i]);
-            cv::Mat desp1 = mCurrentFrame.mDescriptions.row(j);
-            int dist = DescriptorDistance(desp, desp1);
+        for (auto j : candidatePtsIdx){
+            cv::Mat curDesp = mCurrentFrame.mDescriptions.row(j);
+            int dist = DescriptorDistance(lastDesp, curDesp);
             if(dist < bestDist){
                 bestDist = dist;
                 bestId = j;
             }
         }
-        if (bestDist < 40){
+        if(bestDist < 40){
             matchIdx[i] = bestId;
         }
     }
@@ -152,10 +164,10 @@ bool Estimator::Initialize(){
     std::vector<float> err;
     std::vector<cv::Point2f> ptsLK;
     cv::calcOpticalFlowPyrLK(mLastFrame.mImg, mCurrentFrame.mImg, mLastFrame.mvPoints, ptsLK, status, err, cv::Size(21, 21), 8, criteria);
-    std::vector<int> matchIdx = SearchInArea(ptsLK, status, 10, mCurrentFrame.mImg.size());
+    std::vector<int> matchIdx = SearchInArea(ptsLK, status);
     std::vector<cv::Point2f> ptsMchLast, ptsMchCur;
-    std::vector<int> vMPIdxLast(mLastFrame.mvPoints.size(), 0);
-    std::vector<int> vMPIdxCur(mCurrentFrame.mvPoints.size(), 0);
+    std::vector<int> vMPIdxLast(mLastFrame.mvPoints.size(), -1);
+    std::vector<int> vMPIdxCur(mCurrentFrame.mvPoints.size(), -1);
     for (size_t i = 0; i < matchIdx.size(); i++){
         if (matchIdx[i] == -1)
             continue;
@@ -166,8 +178,9 @@ bool Estimator::Initialize(){
         vMPIdxLast.emplace_back(mLastFrame.mvL0KPIndices[i]);
         vMPIdxCur.emplace_back(matchIdx[i]);
     }
+//    DrawMatches(mLastFrame.mImg, mCurrentFrame.mImg, ptsMchLast, ptsMchCur);
     cv::Mat mask;
-    cv::Mat EMat = cv::findEssentialMat(ptsMchLast, ptsMchCur, mK, cv::RANSAC, 0.999, 1.0, mask);
+    cv::Mat EMat = cv::findEssentialMat(ptsMchLast, ptsMchCur, mK, cv::RANSAC, 0.999, 3.0, mask);
     cv::Mat R, t;
     int inlier_cnt = cv::recoverPose(EMat, ptsMchLast, ptsMchCur, mK, R, t, mask);
     if (inlier_cnt < 8)

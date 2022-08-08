@@ -18,7 +18,9 @@ Camera.height: 480
 Camera.fps: 20
 
 feature_num: 300
-pyramid_num: 8
+pyramid_num: 1
 level_factor: 1.2
 FAST_th_init: 20
 FAST_th_min: 7
+
+cell_size: 10

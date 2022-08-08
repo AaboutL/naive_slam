@@ -64,12 +64,13 @@ private:
 
     KeyFrameDB* mpKeyFrameDB;
     Map* mpMap;
+
+    int mCellSize;
     
 private:
     bool Initialize();
 
     int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
-    std::vector<int> SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status,
-        const int cellSize, const cv::Size& imgSize);
+    std::vector<int> SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status);
 };
 }

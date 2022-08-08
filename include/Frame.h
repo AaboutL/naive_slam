@@ -20,10 +20,12 @@
 namespace Naive_SLAM{
 class Frame
 {
+
 public:
     Frame(){}
     Frame(const Frame& frame);
-    Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef);
+    Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
+        const int cell_size);
     void ExtractORB(const cv::Mat& img);
 
 
@@ -54,8 +56,21 @@ public:
     static float cy;
     cv::Mat mDistCoef;
 
+public:
+    std::vector<std::vector<std::vector<std::size_t>>> GetGrid();
+
 private:
     void UndistortKeyPoints();
+    void AssignGrid();
+
+private:
+    int mImgWidth;
+    int mImgHeight;
+    int mCellSize;
+    int mGridRowNum;
+    int mGridColNum;
+    std::vector<std::vector<std::vector<std::size_t>>> mGrid;
+//    std::vector<std::size_t> **mGrid;
 
 };
 
