@@ -157,8 +157,6 @@ bool Estimator::Initialize(){
     auto* curKF = new KeyFrame(mCurrentFrame);
     mpKeyFrameDB->AddKeyFrame(initKF);
     mpKeyFrameDB->AddKeyFrame(curKF);
-    std::vector<cv::Point2f> pts, pts1;
-    std::vector<int> indices;
     cv::TermCriteria criteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01);
     std::vector<uchar> status;
     std::vector<float> err;
@@ -223,6 +221,16 @@ bool Estimator::Initialize(){
     mCurrentFrame.mtwc= -R.t() * t;
 
     return true;
+}
+
+void Estimator::TrackWithOpticalFlow() {
+
+    cv::TermCriteria criteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01);
+    std::vector<uchar> status;
+    std::vector<float> err;
+    std::vector<cv::Point2f> ptsLK;
+    cv::calcOpticalFlowPyrLK(mLastFrame.mImg, mCurrentFrame.mImg, mLastFrame.mvPoints, ptsLK, status, err, cv::Size(21, 21), 8, criteria);
+    std::vector<int> matchIdx = SearchInArea(ptsLK, status);
 }
 
 }
