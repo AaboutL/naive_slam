@@ -1,12 +1,11 @@
 #include <iostream>
 #include <vector>
 #include <stack>
-
-void alg(std::vector<int>& nums){
-
-}
+#include <opencv2/opencv.hpp>
 
 int main(){
-    std::vector<int> nums{0, 1, 2, 3, 0, 0, 4, 0, 5};
-    std::cout << std::endl;
+    cv::Mat img = cv::Mat::ones(100, 100, CV_8UC1);
+//    cv::imshow("test", img);
+//    cv::waitKey(0);
+    return 0;
 }
