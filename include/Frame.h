@@ -40,12 +40,8 @@ public:
     std::vector<cv::Point2f> mvPoints;
     std::vector<cv::Point2f> mvPointsUn;
     std::vector<int> mvL0KPIndices;
-    std::vector<int> mvMapPointIndices;
+    std::vector<int> mvMapPointIndices; // 每一个关键点对应的地图点的索引
     cv::Mat mDescriptions;
-    cv::Mat mRcw;
-    cv::Mat mtcw;
-    cv::Mat mRwc;
-    cv::Mat mtwc; // == camera center in world frame
 
     cv::Mat mImg;
 
@@ -58,12 +54,34 @@ public:
 
 public:
     std::vector<std::vector<std::vector<std::size_t>>> GetGrid();
+    void SetKeyPointsAndMapPointsMatchIdx(const std::vector<int>& mapPointsIdx);
+    std::vector<int> GetKeyPointsAndMapPointsMatchIdx();
+
+    cv::Mat GetRotation() const;
+    cv::Mat GetTranslation() const;
+    cv::Mat GetRotationInv() const;
+    cv::Mat GetCameraCenter() const;
+    cv::Mat GetTcw() const;
+    cv::Mat GetTwc() const;
+
+    void SetRotation(const cv::Mat& Rcw);
+    void SetTranslation(const cv::Mat& tcw);
+    void SetT(const cv::Mat& Tcw);
+    void SetT(const cv::Mat& Rcw, const cv::Mat& tcw);
 
 private:
     void UndistortKeyPoints();
     void AssignGrid();
 
 private:
+    bool mflag;
+    cv::Mat mRcw;
+    cv::Mat mtcw;
+    cv::Mat mTcw;
+    cv::Mat mRwc;
+    cv::Mat mtwc; // == camera center in world frame
+    cv::Mat mTwc;
+
     int mImgWidth;
     int mImgHeight;
     int mCellSize;

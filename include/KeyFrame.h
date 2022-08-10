@@ -26,13 +26,20 @@ public:
     KeyFrame(const Frame& frame);
     void AddMapPoints(std::vector<MapPoint*>& mapPoints);
 
+    cv::Mat GetRotation() const;
+    cv::Mat GetTranslation() const;
+    cv::Mat GetRotationInv() const;
+    cv::Mat GetCameraCenter() const;
+
+    void SetRotation(const cv::Mat& Rcw);
+    void SetTranslation(const cv::Mat& tcw);
+
 private:
     std::vector<MapPoint*> mvpMapPoints;
     std::vector<cv::KeyPoint> mvKeyPoints;
     std::vector<cv::KeyPoint> mvKeyPointsUn;
     cv::Mat mDescriptions;
 
-public:
     cv::Mat mRcw;
     cv::Mat mtcw;
     cv::Mat mRwc;

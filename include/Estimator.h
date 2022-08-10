@@ -66,6 +66,7 @@ private:
     Map* mpMap;
 
     int mCellSize;
+    cv::Mat mVelocity;
     
 private:
     bool Initialize();
@@ -73,5 +74,6 @@ private:
     int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
     std::vector<int> SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status);
     void TrackWithOpticalFlow();
+    void UpdateVelocity();
 };
 }

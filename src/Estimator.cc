@@ -95,6 +95,7 @@ void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
         bool flag = Initialize();
         if(flag){
             mLastFrame = Frame(mCurrentFrame);
+            UpdateVelocity();
             mState = OK;
         }
         else{
@@ -176,6 +177,8 @@ bool Estimator::Initialize(){
         vMPIdxLast.emplace_back(mLastFrame.mvL0KPIndices[i]);
         vMPIdxCur.emplace_back(matchIdx[i]);
     }
+    mLastFrame.SetKeyPointsAndMapPointsMatchIdx(vMPIdxLast);
+    mCurrentFrame.SetKeyPointsAndMapPointsMatchIdx(vMPIdxCur);
 //    DrawMatches(mLastFrame.mImg, mCurrentFrame.mImg, ptsMchLast, ptsMchCur);
     cv::Mat mask;
     cv::Mat EMat = cv::findEssentialMat(ptsMchLast, ptsMchCur, mK, cv::RANSAC, 0.999, 3.0, mask);
@@ -211,26 +214,46 @@ bool Estimator::Initialize(){
         return false;
     mpInitKF->AddMapPoints(pMapPoints);
     curKF->AddMapPoints(pMapPoints);
-    curKF->mRcw = R;
-    curKF->mtcw = t;
-    curKF->mRwc = R.t();
-    curKF->mtwc = -R.t() * t;
-    mCurrentFrame.mRcw = R;
-    mCurrentFrame.mtcw= t;
-    mCurrentFrame.mRwc = R.t();
-    mCurrentFrame.mtwc= -R.t() * t;
+    curKF->SetRotation(R);
+    curKF->SetTranslation(t);
+    mCurrentFrame.SetRotation(R);
+    mCurrentFrame.SetTranslation(t);
 
     return true;
 }
 
-void Estimator::TrackWithOpticalFlow() {
+void Estimator::UpdateVelocity() {
+    cv::Mat lastTwc = mLastFrame.GetTwc();
+    mVelocity = mCurrentFrame.GetTcw() * mLastFrame.GetTwc();
+}
 
+/**
+ * 1、用光流法跟踪上一帧的关键点
+ * 2、通过索引查找跟踪到的点对应的MapPoints
+ * 3、把对应的MapPoints投影到当前帧，通过最小化重投影误差来优化当前帧的位姿。
+ * 4、通过优化后的位姿计算当前帧关键点的重投影误差，如果误差小于阈值，则记录这个关键点对应的MapPoints的索引
+ */
+void Estimator::TrackWithOpticalFlow() {
     cv::TermCriteria criteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01);
     std::vector<uchar> status;
     std::vector<float> err;
     std::vector<cv::Point2f> ptsLK;
     cv::calcOpticalFlowPyrLK(mLastFrame.mImg, mCurrentFrame.mImg, mLastFrame.mvPoints, ptsLK, status, err, cv::Size(21, 21), 8, criteria);
-    std::vector<int> matchIdx = SearchInArea(ptsLK, status);
+    std::vector<int> matchIdx = SearchInArea(ptsLK, status); // matchIdx记录上一帧每个关键点对应的当前帧关键点的索引
+    std::vector<int> vLastKPsAndMPsMatch = mLastFrame.GetKeyPointsAndMapPointsMatchIdx();
+    std::vector<int> vCurKPsAndMPsMatch(mCurrentFrame.N, -1);
+    for (int i = 0; i < matchIdx.size(); i++){
+        int curKeyPointId = matchIdx[i];
+        int mapPointId = vLastKPsAndMPsMatch[i];
+        if(curKeyPointId == -1) // 上一帧的点是否被光流跟踪到
+            continue;
+        if(mapPointId == -1) // 上一帧的点是否有对应的MapPoint
+            continue;
+        vCurKPsAndMPsMatch[curKeyPointId] = mapPointId;
+    }
+    mCurrentFrame.SetKeyPointsAndMapPointsMatchIdx(vCurKPsAndMPsMatch);
+    cv::Mat curTcw = mVelocity * mLastFrame.GetTcw();
+    mCurrentFrame.SetT(curTcw);
 }
 
 }
