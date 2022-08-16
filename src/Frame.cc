@@ -18,7 +18,7 @@ float Frame::fx, Frame::fy, Frame::cx, Frame::cy;
 
 Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpORBextractor(frame.mpORBextractor),
                                   mvKeyPoints(frame.mvKeyPoints), mvKeyPointsUn(frame.mvKeyPointsUn), mvPoints(frame.mvPoints),
-                                  mvPointsUn(frame.mvPointsUn), mvL0KPIndices(frame.mvL0KPIndices),
+                                  mvPointsUn(frame.mvPointsUn), mvL0KPIndices(frame.mvL0KPIndices), mvMapPointIndices(frame.mvMapPointIndices),
                                   mDescriptions(frame.mDescriptions.clone()), mImg(frame.mImg.clone()),
                                   mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone()),
                                   mflag(false),
@@ -30,7 +30,10 @@ Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpOR
 
 Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
              const int cellSize):mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
-                                 mflag(false), mImgWidth(img.cols), mImgHeight(img.rows), mCellSize(cellSize){
+                                 mflag(false),
+                                 mRcw(cv::Mat::eye(3, 3, CV_32F)), mtcw(cv::Mat::zeros(3, 1, CV_32F)), mTcw(cv::Mat::eye(4, 4, CV_32F)),
+                                 mRwc(cv::Mat::eye(3, 3, CV_32F)), mtwc(cv::Mat::zeros(3, 1, CV_32F)), mTwc(cv::Mat::eye(4, 4, CV_32F)),
+                                 mImgWidth(img.cols), mImgHeight(img.rows), mCellSize(cellSize){
     fx = K.at<float>(0, 0);
     fy = K.at<float>(1, 1);
     cx = K.at<float>(0, 2);
@@ -57,8 +60,8 @@ Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extracto
     mImgWidth = mImg.cols;
     mImgHeight = mImg.rows;
 
-    mGridColNum = int(std::ceil(mImgWidth / mCellSize));
-    mGridRowNum = int(std::ceil(mImgHeight / mCellSize));
+    mGridColNum = (int)std::ceil((float)mImgWidth / (float)mCellSize);
+    mGridRowNum = (int)std::ceil((float)mImgHeight / (float)mCellSize);
     mGrid = std::vector<std::vector<std::vector<std::size_t>>>(mGridRowNum, std::vector<std::vector<std::size_t>>(mGridColNum, std::vector<std::size_t>(0)));
     AssignGrid();
 }
@@ -111,7 +114,7 @@ void Frame::SetKeyPointsAndMapPointsMatchIdx(const std::vector<int>& mapPointsId
     mvMapPointIndices = mapPointsIdx;
 }
 
-std::vector<int> Frame::GetKeyPointsAndMapPointsMatchIdx() {
+std::vector<int> Frame::GetKeyPointsAndMapPointsMatchIdx() const {
     return mvMapPointIndices;
 }
 
@@ -160,15 +163,17 @@ void Frame::SetTranslation(const cv::Mat& tcw) {
 }
 
 void Frame::SetT(const cv::Mat& Rcw, const cv::Mat& tcw){
+    mRcw = Rcw;
+    mtcw = tcw;
     mTcw = cv::Mat::eye(4, 4, CV_32F);
-    Rcw.copyTo(mTcw.rowRange(0, 3).colRange(0, 3));
-    tcw.copyTo(mTcw.rowRange(0, 3).col(3));
+    mRcw.copyTo(mTcw.rowRange(0, 3).colRange(0, 3));
+    mtcw.copyTo(mTcw.rowRange(0, 3).col(3));
 
     mTwc = cv::Mat::eye(4, 4, CV_32F);
-    cv::Mat Rwc = Rcw.t();
-    cv::Mat twc = -Rwc * tcw;
-    Rwc.copyTo(mTwc.rowRange(0, 3).colRange(0, 3));
-    twc.copyTo(mTwc.rowRange(0, 3).col(3));
+    mRwc = Rcw.t();
+    mtwc = -Rcw.t() * tcw;
+    mRwc.copyTo(mTwc.rowRange(0, 3).colRange(0, 3));
+    mtwc.copyTo(mTwc.rowRange(0, 3).col(3));
 }
 
 void Frame::SetT(const cv::Mat& Tcw){

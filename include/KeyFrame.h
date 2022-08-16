@@ -23,8 +23,8 @@ class MapPoint;
 
 class KeyFrame{
 public:
-    KeyFrame(const Frame& frame);
-    void AddMapPoints(std::vector<MapPoint*>& mapPoints);
+    explicit KeyFrame(const Frame& frame);
+    void AddMapPoint(MapPoint* mapPoint);
 
     cv::Mat GetRotation() const;
     cv::Mat GetTranslation() const;
@@ -33,6 +33,8 @@ public:
 
     void SetRotation(const cv::Mat& Rcw);
     void SetTranslation(const cv::Mat& tcw);
+    void SetT(const cv::Mat& Tcw);
+    void SetT(const cv::Mat& Rcw, const cv::Mat& tcw);
 
 private:
     std::vector<MapPoint*> mvpMapPoints;
@@ -42,7 +44,10 @@ private:
 
     cv::Mat mRcw;
     cv::Mat mtcw;
+    cv::Mat mTcw;
     cv::Mat mRwc;
     cv::Mat mtwc;
+    cv::Mat mTwc;
+
 };
 }

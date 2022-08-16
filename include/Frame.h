@@ -15,9 +15,12 @@
 #include <opencv2/opencv.hpp>
 
 #include "ORBextractor.h"
-
+//#include "MapPoint.h"
 
 namespace Naive_SLAM{
+
+//class MapPoint;
+
 class Frame
 {
 
@@ -55,7 +58,7 @@ public:
 public:
     std::vector<std::vector<std::vector<std::size_t>>> GetGrid();
     void SetKeyPointsAndMapPointsMatchIdx(const std::vector<int>& mapPointsIdx);
-    std::vector<int> GetKeyPointsAndMapPointsMatchIdx();
+    std::vector<int> GetKeyPointsAndMapPointsMatchIdx() const;
 
     cv::Mat GetRotation() const;
     cv::Mat GetTranslation() const;
@@ -88,7 +91,8 @@ private:
     int mGridRowNum;
     int mGridColNum;
     std::vector<std::vector<std::vector<std::size_t>>> mGrid;
-//    std::vector<std::size_t> **mGrid;
+
+//    std::vector<MapPoint*> mvpMapPoints;
 
 };
 

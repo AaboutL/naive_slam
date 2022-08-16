@@ -19,8 +19,11 @@ class Map{
 public:
     // Map();
     void AddMapPoint(MapPoint* mapPoint);
+    void InsertMapPoints(const std::vector<MapPoint*>& mapPoints);
+    MapPoint* GetMapPoint(int id);
+
 private:
-    std::set<MapPoint*> mspMapPoints;
+    std::vector<MapPoint*> mvpMapPoints;
 };
 
 }

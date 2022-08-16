@@ -11,6 +11,16 @@
 #include "MapPoint.h"
 
 namespace Naive_SLAM{
+
+MapPoint::MapPoint(const MapPoint& mapPoint){
+    mvObservations = mapPoint.mvObservations;
+    mvpKFs = mapPoint.mvpKFs;
+    mpRefKF = mapPoint.mpRefKF;
+    mPoint = mapPoint.mPoint;
+    mDescriptor = mapPoint.mDescriptor;
+
+}
+
 MapPoint::MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF){
     mPoint = mp;
     mpRefKF = pRefKF;
@@ -20,4 +30,9 @@ MapPoint::MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF){
 void MapPoint::AddKeyFrame(KeyFrame* pKF){
     mvpKFs.emplace_back(pKF);
 }
+
+cv::Point3f MapPoint::GetWorldPos() const {
+    return mPoint;
+}
+
 }

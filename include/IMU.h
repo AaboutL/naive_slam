@@ -12,7 +12,7 @@
 #pragma once
 
 #include <iostream>
-#include <eigen3/Eigen/Eigen>
+#include <Eigen/Eigen>
 
 namespace Naive_SLAM{
 

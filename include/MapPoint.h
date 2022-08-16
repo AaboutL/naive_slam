@@ -22,8 +22,10 @@ class KeyFrame;
 
 class MapPoint{
 public:
+    MapPoint(const MapPoint& mapPoint);
     MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF);
     void AddKeyFrame(KeyFrame* pKF);
+    cv::Point3f GetWorldPos() const;
 
 private:
     std::vector<std::pair<KeyFrame*, int>> mvObservations;

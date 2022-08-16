@@ -34,8 +34,8 @@ std::vector<std::string> ReadData(const std::string& dataPath){
 
 int main(int argc, char** argv){
 
-    std::string dataPath = "/home/aal/dataset/slam/EuRoC/MH_01_easy/mav0/cam0/";
-    std::string strParamFile = "/home/aal/workspace/private/naive_slam/config.yaml";
+    std::string dataPath = "/home/aal/workspace/dataset/EuRoC/mav0/cam0/";
+    std::string strParamFile = "../config.yaml";
     VISLAM vislam(strParamFile);
     std::vector<std::string> vstrTimeStamp = ReadData(dataPath);
 
@@ -46,8 +46,8 @@ int main(int argc, char** argv){
         std::string path = dataPath + "data/" + strTimeStamp + ".png";
         std::cout << path << std::endl;
         cv::Mat image = cv::imread(path);
-        // cv::imshow("img", image);
-        // cv::waitKey(0);
+//         cv::imshow("img", image);
+//         cv::waitKey(0);
         vislam.Run(image, timestamp);
     }
     return 0;
