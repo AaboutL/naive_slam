@@ -9,7 +9,7 @@
  * Copyright (c) 2022 by hanfuyong, All Rights Reserved. 
  */
 #include <iostream>
-//#include <fstream>
+//#include <glog/logging.h>
 
 #include "VISLAM.h"
 
@@ -33,7 +33,8 @@ std::vector<std::string> ReadData(const std::string& dataPath){
 }
 
 int main(int argc, char** argv){
-
+//    FLAGS_alsologtostderr = 1;
+//    google::InitGoogleLogging(argv[0]);
     std::string dataPath = "/home/aal/workspace/dataset/EuRoC/mav0/cam0/";
     std::string strParamFile = "../config.yaml";
     VISLAM vislam(strParamFile);
@@ -46,8 +47,7 @@ int main(int argc, char** argv){
         std::string path = dataPath + "data/" + strTimeStamp + ".png";
         std::cout << path << std::endl;
         cv::Mat image = cv::imread(path);
-//         cv::imshow("img", image);
-//         cv::waitKey(0);
+//        LOG(INFO) << "test log";
         vislam.Run(image, timestamp);
     }
     return 0;

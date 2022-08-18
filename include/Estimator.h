@@ -65,16 +65,29 @@ private:
     KeyFrameDB* mpKeyFrameDB;
     Map* mpMap;
 
+    int mImgWidth;
+    int mImgHeight;
     int mCellSize;
+    int mGridRows;
+    int mGridCols;
     cv::Mat mVelocity;
-    
+
+    std::deque<KeyFrame*> mqpSlidingWindowKFs;
+    std::set<MapPoint*> mspSlidingWindowMPs;
+
+    cv::Mat mLastestKFImg;
+
 private:
     bool Initialize();
 
     int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
-    std::vector<int> SearchInArea(const std::vector<cv::Point2f>& ptsLK, const std::vector<uchar>& status);
+
+    bool SearchGrid(const cv::Point2f& pt2d, const cv::Mat& description, std::vector<size_t>** grid, float radius, int& matchedId);
+    std::vector<int> SearchByOpticalFlow();
     bool TrackWithOpticalFlow();
     void UpdateVelocity();
-    bool PoseOptimization(const std::vector<int>& curKPsAndMPsMatch, cv::Mat& Tcw);
+    bool TrackWithKeyFrame();
+    std::vector<int> SearchByProjection(const std::vector<MapPoint*>& mapPoints, const cv::Mat& Tcw);
+    cv::Point2f project(const cv::Mat& pt3d) const;
 };
 }

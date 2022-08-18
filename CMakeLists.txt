@@ -10,32 +10,26 @@ set(G2O_ROOT "/home/aal/3rdparty/g2o")
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 FILE(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
 
-#set(Eigen3_DIR "/home/aal/3rdparty/eigen-3.3.7/share/eigen3/cmake")
 set(OpenCV_DIR "/home/aal/3rdparty/opencv-3.4.16/share/OpenCV")
 
-#set(Pangolin_DIR "/home/aal/software/Pangolin/build")
-# set(Pangolin_DIR "/home/aal/3rdparty/Pangolin/lib/cmake/Pangolin")
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV 3.4 REQUIRED)
 find_package(G2O REQUIRED)
+#find_package(Glog REQUIRED)
 include_directories(${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
+#        ${GLOG_INCLUDE_DIRS}
         )
 
 FILE(GLOB CPPS ${PROJECT_SOURCE_DIR}/src/*)
 add_library(${PROJECT_NAME} SHARED
-    ${CPPS})
+    ${CPPS} include/tools.h)
 
 target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}
-#    ${G2O_CORE_LIBRARY}
-#    ${G2O_TYPES_SLAM3D}
-#    ${G2O_SOLVER_DENSE}
-#    ${G2O_TYPES_SBA}
-#    ${G2O_STUFF_LIBRARY}
     ${G2O_LIBS}
     glog
     )

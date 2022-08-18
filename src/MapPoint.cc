@@ -17,7 +17,7 @@ MapPoint::MapPoint(const MapPoint& mapPoint){
     mvpKFs = mapPoint.mvpKFs;
     mpRefKF = mapPoint.mpRefKF;
     mPoint = mapPoint.mPoint;
-    mDescriptor = mapPoint.mDescriptor;
+    mDescription = mapPoint.mDescription;
 
 }
 
@@ -33,6 +33,14 @@ void MapPoint::AddKeyFrame(KeyFrame* pKF){
 
 cv::Point3f MapPoint::GetWorldPos() const {
     return mPoint;
+}
+
+void MapPoint::SetDescription(const cv::Mat& description){
+    mDescription = description;
+}
+
+cv::Mat MapPoint::GetDescription() const {
+    return mDescription;
 }
 
 }

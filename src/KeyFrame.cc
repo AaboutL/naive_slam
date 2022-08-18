@@ -79,4 +79,8 @@ void KeyFrame::SetT(const cv::Mat& Tcw){
     mtwc.copyTo(mTwc.rowRange(0, 3).col(3));
 }
 
+std::vector<MapPoint*> KeyFrame::GetMapPoints() const {
+    return mvpMapPoints;
+}
+
 }

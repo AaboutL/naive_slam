@@ -25,15 +25,17 @@ Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpOR
                                   mRcw(frame.mRcw.clone()), mtcw(frame.mtcw.clone()), mTcw(frame.mTcw.clone()),
                                   mRwc(frame.mRwc.clone()), mtwc(frame.mtwc.clone()), mTwc(frame.mTwc.clone()),
                                   mImgWidth(frame.mImgWidth), mImgHeight(frame.mImgHeight),
-                                  mCellSize(frame.mCellSize), mGridRowNum(frame.mGridRowNum), mGridColNum(frame.mGridColNum), mGrid(frame.mGrid)
+                                  mCellSize(frame.mCellSize), mGridRows(frame.mGridRows), mGridCols(frame.mGridCols),
+                                  mGrid(frame.mGrid)
 {}
 
 Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
-             const int cellSize):mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
-                                 mflag(false),
-                                 mRcw(cv::Mat::eye(3, 3, CV_32F)), mtcw(cv::Mat::zeros(3, 1, CV_32F)), mTcw(cv::Mat::eye(4, 4, CV_32F)),
-                                 mRwc(cv::Mat::eye(3, 3, CV_32F)), mtwc(cv::Mat::zeros(3, 1, CV_32F)), mTwc(cv::Mat::eye(4, 4, CV_32F)),
-                                 mImgWidth(img.cols), mImgHeight(img.rows), mCellSize(cellSize){
+             const int imgWidth, const int imgHeight, const int cellSize, const int gridRows, const int gridCols):
+             mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
+             mflag(false),
+             mRcw(cv::Mat::eye(3, 3, CV_32F)), mtcw(cv::Mat::zeros(3, 1, CV_32F)), mTcw(cv::Mat::eye(4, 4, CV_32F)),
+             mRwc(cv::Mat::eye(3, 3, CV_32F)), mtwc(cv::Mat::zeros(3, 1, CV_32F)), mTwc(cv::Mat::eye(4, 4, CV_32F)),
+             mImgWidth(imgWidth), mImgHeight(imgHeight), mCellSize(cellSize), mGridRows(gridRows), mGridCols(gridCols){
     fx = K.at<float>(0, 0);
     fy = K.at<float>(1, 1);
     cx = K.at<float>(0, 2);
@@ -57,12 +59,12 @@ Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extracto
     mRwc = cv::Mat::eye(3, 3, CV_32F);
     mtwc = cv::Mat::zeros(3, 1, CV_32F);
 
-    mImgWidth = mImg.cols;
-    mImgHeight = mImg.rows;
 
-    mGridColNum = (int)std::ceil((float)mImgWidth / (float)mCellSize);
-    mGridRowNum = (int)std::ceil((float)mImgHeight / (float)mCellSize);
-    mGrid = std::vector<std::vector<std::vector<std::size_t>>>(mGridRowNum, std::vector<std::vector<std::size_t>>(mGridColNum, std::vector<std::size_t>(0)));
+//    mGrid = std::vector<std::vector<std::vector<std::size_t>>>(mGridRows, std::vector<std::vector<std::size_t>>(mGridCols, std::vector<std::size_t>(0)));
+    mGrid = new std::vector<size_t>*[mGridRows];
+    for (int i = 0; i < mGridRows; i++){
+        mGrid[i] = new std::vector<size_t>[mGridCols];
+    }
     AssignGrid();
 }
 
@@ -106,7 +108,10 @@ void Frame::AssignGrid() {
     }
 }
 
-std::vector<std::vector<std::vector<std::size_t>>> Frame::GetGrid() {
+//std::vector<std::vector<std::vector<std::size_t>>> Frame::GetGrid() {
+//    return mGrid;
+//}
+std::vector<std::size_t>** Frame::GetGrid() const {
     return mGrid;
 }
 

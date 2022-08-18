@@ -26,13 +26,15 @@ public:
     MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF);
     void AddKeyFrame(KeyFrame* pKF);
     cv::Point3f GetWorldPos() const;
+    void SetDescription(const cv::Mat& description);
+    cv::Mat GetDescription() const;
 
 private:
     std::vector<std::pair<KeyFrame*, int>> mvObservations;
     std::vector<KeyFrame*> mvpKFs;
     KeyFrame* mpRefKF;
     cv::Point3f mPoint;
-    cv::Mat mDescriptor;
+    cv::Mat mDescription;
 
 };
 

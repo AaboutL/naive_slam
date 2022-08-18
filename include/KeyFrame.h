@@ -36,6 +36,8 @@ public:
     void SetT(const cv::Mat& Tcw);
     void SetT(const cv::Mat& Rcw, const cv::Mat& tcw);
 
+    std::vector<MapPoint*> GetMapPoints() const;
+
 private:
     std::vector<MapPoint*> mvpMapPoints;
     std::vector<cv::KeyPoint> mvKeyPoints;

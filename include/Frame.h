@@ -28,7 +28,7 @@ public:
     Frame(){}
     Frame(const Frame& frame);
     Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
-        const int cell_size);
+        const int imgWidth, const int imgHeight, const int cellSize, const int gridRows, const int gridCols);
     void ExtractORB(const cv::Mat& img);
 
 
@@ -56,7 +56,7 @@ public:
     cv::Mat mDistCoef;
 
 public:
-    std::vector<std::vector<std::vector<std::size_t>>> GetGrid();
+    std::vector<std::size_t>** GetGrid() const;
     void SetKeyPointsAndMapPointsMatchIdx(const std::vector<int>& mapPointsIdx);
     std::vector<int> GetKeyPointsAndMapPointsMatchIdx() const;
 
@@ -88,9 +88,10 @@ private:
     int mImgWidth;
     int mImgHeight;
     int mCellSize;
-    int mGridRowNum;
-    int mGridColNum;
-    std::vector<std::vector<std::vector<std::size_t>>> mGrid;
+    int mGridRows;
+    int mGridCols;
+//    std::vector<std::vector<std::vector<std::size_t>>> mGrid;
+    std::vector<std::size_t>** mGrid;
 
 //    std::vector<MapPoint*> mvpMapPoints;
 
