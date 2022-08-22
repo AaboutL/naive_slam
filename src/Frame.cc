@@ -148,28 +148,18 @@ cv::Mat Frame::GetTwc() const {
 }
 
 void Frame::SetRotation(const cv::Mat& Rcw){
-    if(mflag){
-        std::cout << "Set R and t in wrong order! Please set R first." << std::endl;
-        exit(0);
-    }
-    mRcw = Rcw;
+    mRcw = Rcw.clone();
     mRwc = mRcw.t();
-    mflag = true;
 }
 
 void Frame::SetTranslation(const cv::Mat& tcw) {
-    if (!mflag) {
-        std::cout << "Set R and t in wrong order! Please set R first." << std::endl;
-        exit(0);
-    }
-    mtcw = tcw;
+    mtcw = tcw.clone();
     mtwc = -mRwc * mtcw;
-    mflag = false;
 }
 
 void Frame::SetT(const cv::Mat& Rcw, const cv::Mat& tcw){
-    mRcw = Rcw;
-    mtcw = tcw;
+    mRcw = Rcw.clone();
+    mtcw = tcw.clone();
     mTcw = cv::Mat::eye(4, 4, CV_32F);
     mRcw.copyTo(mTcw.rowRange(0, 3).colRange(0, 3));
     mtcw.copyTo(mTcw.rowRange(0, 3).col(3));
@@ -182,14 +172,15 @@ void Frame::SetT(const cv::Mat& Rcw, const cv::Mat& tcw){
 }
 
 void Frame::SetT(const cv::Mat& Tcw){
-    mTcw = Tcw;
+    mTcw = Tcw.clone();
 
     mRcw = Tcw.rowRange(0, 3).colRange(0, 3);
     mtcw = Tcw.rowRange(0, 3).col(3);
-    mTwc = cv::Mat::eye(4, 4, CV_32F);
+
     mRwc = mRcw.t();
     mtwc = -mRwc * mtcw;
 
+    mTwc = cv::Mat::eye(4, 4, CV_32F);
     mRwc.copyTo(mTwc.rowRange(0, 3).colRange(0, 3));
     mtwc.copyTo(mTwc.rowRange(0, 3).col(3));
 }

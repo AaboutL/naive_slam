@@ -85,6 +85,7 @@ void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
         if(flag){
             mLastFrame = Frame(mCurrentFrame);
             UpdateVelocity();
+            mLastestKFImg = mImGray;
             mState = OK;
         }
         else{
@@ -110,6 +111,7 @@ void Estimator::Estimate(const cv::Mat& image, const double& timestamp){
             std::cout << "project track cost: " << duration1 << std::endl;
             std::cout << "[Estimate: TrackWithKeyFrame] track state: " << bOK << std::endl;
 //        }
+        UpdateVelocity();
     }
     mLastFrame = Frame(mCurrentFrame);
 }
@@ -119,6 +121,7 @@ bool Estimator::Initialize(){
     auto* curKF = new KeyFrame(mCurrentFrame);
 
     std::vector<int> matchIdx = SearchByOpticalFlow();
+
     std::vector<cv::Point2f> ptsMchLast, ptsMchCur;
     std::vector<int> matchMPWithKPLast, matchMPWithKPCur; // 剔除不好的地图点前，每个地图点对应的关键点的索引
     for (size_t i = 0; i < matchIdx.size(); i++){
@@ -198,7 +201,9 @@ bool Estimator::Initialize(){
     mLastFrame.SetKeyPointsAndMapPointsMatchIdx(matchKPWithMPLast);
     mCurrentFrame.SetKeyPointsAndMapPointsMatchIdx(matchKPWithMPCur);
     mpInitKF = initKF;
+    mpInitKF->SetMatchKPWithMP(matchMPWithKPLast);
     curKF->SetT(R, t);
+    curKF->SetMatchKPWithMP(matchKPWithMPCur);
     mCurrentFrame.SetT(R, t);
 
     mpKeyFrameDB->AddKeyFrame(initKF);
@@ -215,6 +220,7 @@ bool Estimator::Initialize(){
  */
 void Estimator::UpdateVelocity() {
     cv::Mat lastTwc = mLastFrame.GetTwc();
+    PrintMat("lastTwc: ", lastTwc);
     mVelocity = mCurrentFrame.GetTcw() * lastTwc;
 }
 
@@ -267,12 +273,17 @@ bool Estimator::SearchGrid(const cv::Point2f& pt2d, const cv::Mat& description, 
 }
 
 std::vector<int> Estimator::SearchByOpticalFlow() {
+//    KeyFrame* lastestKF = mqpSlidingWindowKFs.back();
+//    std::vector<cv::Point2f> lastestKFPoints = lastestKF->GetPoints();
+
     cv::TermCriteria criteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01);
     std::vector<uchar> status;
     std::vector<float> err;
     std::vector<cv::Point2f> ptsLK;
     cv::calcOpticalFlowPyrLK(mLastFrame.mImg, mCurrentFrame.mImg, mLastFrame.mvPoints, ptsLK,
                              status, err, cv::Size(21, 21), 1, criteria);
+//    cv::calcOpticalFlowPyrLK(mLastestKFImg, mCurrentFrame.mImg, lastestKFPoints, ptsLK,
+//                             status, err, cv::Size(21, 21), 1, criteria);
     std::vector<size_t>** grid = mCurrentFrame.GetGrid();
     std::vector<int> matchesIdx(mLastFrame.N, -1);
     int nMatches = 0;
@@ -284,7 +295,7 @@ std::vector<int> Estimator::SearchByOpticalFlow() {
             continue;
         cv::Mat description = mLastFrame.mDescriptions.row(i);
         int matchedId;
-        if(SearchGrid(pt, description, grid, 13, matchedId)){
+        if(SearchGrid(pt, description, grid, 40, matchedId)){
             matchesIdx[i] = matchedId;
             nMatches++;
         }
@@ -330,7 +341,8 @@ bool Estimator::TrackWithOpticalFlow() {
     }
 
     cv::Mat frameTcw = mVelocity * mLastFrame.GetTcw();
-    int nInliers = Optimization::PoseOptimize(pointsUn, mapPoints, mK, frameTcw);
+    std::vector<bool> bOutlier;
+    int nInliers = Optimization::PoseOptimize(pointsUn, mapPoints, mK, frameTcw, bOutlier);
     std::cout << "[TrackWithOpticalFlow] PoseOptimize inliers num: " << nInliers << std::endl;
     if(nInliers > 3){
         mCurrentFrame.SetT(frameTcw);
@@ -355,6 +367,7 @@ std::vector<int> Estimator::SearchByProjection(const std::vector<MapPoint*>& map
         cv::Point2f pt2dUn = project(pt3dc);
         if (pt2dUn.x >= mImgWidth || pt2dUn.x < 0 || pt2dUn.y < 0 || pt2dUn.y >= mImgHeight)
             continue;
+
         int matchedId;
         if(SearchGrid(pt2dUn, matDesc, grid, 40, matchedId)){
             matchesIdx[i] = matchedId;
@@ -369,18 +382,24 @@ bool Estimator::TrackWithKeyFrame() {
     KeyFrame* lastestKF = mqpSlidingWindowKFs.back();
     std::vector<MapPoint*> mapPointsInKF = lastestKF->GetMapPoints();
     cv::Mat frameTcw = mVelocity * mLastFrame.GetTcw();
+    PrintMat("Velocity Tcw: ", frameTcw);
+
     std::vector<int> matchesIdx = SearchByProjection(mapPointsInKF, frameTcw);
     std::vector<MapPoint*> mapPoints;
-    std::vector<cv::Point2f> pointsUn;
+    std::vector<cv::Point2f> pointsUnMatched;
     for(int i = 0; i < matchesIdx.size(); i++){
         if(matchesIdx[i] == -1)
             continue;
         mapPoints.emplace_back(mapPointsInKF[i]);
-        pointsUn.emplace_back(mCurrentFrame.mvPointsUn[matchesIdx[i]]);
+        pointsUnMatched.emplace_back(mCurrentFrame.mvPointsUn[matchesIdx[i]]);
     }
+    std::vector<bool> bOutlier;
+    int nInliers = Optimization::PoseOptimize(pointsUnMatched, mapPoints, mK, frameTcw, bOutlier);
 
-    int nInliers = Optimization::PoseOptimize(pointsUn, mapPoints, mK, frameTcw);
-    if(nInliers > 3){
+    // 画图
+    DrawPoints(mCurrentFrame, pointsUnMatched, bOutlier);
+
+    if(nInliers > 10){
         mCurrentFrame.SetT(frameTcw);
         return true;
     }
@@ -395,5 +414,50 @@ cv::Point2f Estimator::project(const cv::Mat &pt3d) const {
     float y_un = y_norm * fy + cy;
     return {x_un, y_un};
 }
+
+int Estimator::SearchByProjection(std::vector<MapPoint*>& vMapPoints, std::vector<cv::Point2f>& vPointsUn) {
+    cv::Mat Tcw = mCurrentFrame.GetTcw();
+    cv::Mat Rcw = Tcw.rowRange(0, 3).colRange(0, 3);
+    cv::Mat tcw = Tcw.rowRange(0, 3).col(3);
+    std::vector<size_t>** grid = mCurrentFrame.GetGrid();
+    int nMatches = 0;
+    for(const auto& pMP: mspSlidingWindowMPs){
+        cv::Point3f pt3dw = pMP->GetWorldPos();
+        cv::Mat matDesc = pMP->GetDescription();
+        cv::Mat pt_tmp(cv::Matx<float, 3, 1>(pt3dw.x, pt3dw.y, pt3dw.z));
+        cv::Mat pt3dc = Rcw * pt_tmp + tcw;
+        cv::Point2f pt2dUn = project(pt3dc);
+        if (pt2dUn.x >= mImgWidth || pt2dUn.x < 0 || pt2dUn.y < 0 || pt2dUn.y >= mImgHeight)
+            continue;
+
+        int matchedId;
+        if(SearchGrid(pt2dUn, matDesc, grid, 40, matchedId)){
+            vPointsUn.emplace_back(mCurrentFrame.mvPointsUn[matchedId]);
+            vMapPoints.emplace_back(pMP);
+            nMatches++;
+        }
+    }
+    return nMatches;
+}
+
+bool Estimator::TrackWithinSlidingWindow() {
+    std::vector<MapPoint*> vMapPointsMatched;
+    std::vector<cv::Point2f> vPointsUnMatched;
+    int nMatches = SearchByProjection(vMapPointsMatched, vPointsUnMatched);
+
+    cv::Mat frameTcw = mCurrentFrame.GetTcw();
+    std::vector<bool> bOutlier;
+    int nInliers = Optimization::PoseOptimize(vPointsUnMatched, vMapPointsMatched, mK, frameTcw, bOutlier);
+
+    // 画图
+    DrawPoints(mCurrentFrame, vPointsUnMatched, bOutlier);
+    if(nInliers > 30){
+        mCurrentFrame.SetT(frameTcw);
+        return true;
+    }
+    else
+        return false;
+}
+
 
 }

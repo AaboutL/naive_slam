@@ -16,9 +16,10 @@
 namespace Naive_SLAM{
 
 int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std::vector<MapPoint *> &mapPoints,
-                                const cv::Mat &matK, cv::Mat& Tcw) {
+                                const cv::Mat &matK, cv::Mat& Tcw, std::vector<bool>& outlier) {
     // 定义g2o优化器，可看作总管
     g2o::SparseOptimizer optimizer;
+    optimizer.setVerbose(true);
 
     // 定义线性求解器，是BlockSolver类中的成员。
     // LinearSolverType是在BlockSolver类中对LinearSolver类的一个类型定义
@@ -51,7 +52,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
     std::vector<g2o::EdgeSE3ProjectXYZOnlyPose*> monoEdges;
     std::vector<int> monoEdgesIdx;
     int n = mapPoints.size();
-    std::vector<bool> outlier(n, true);
+    outlier.resize(n, true);
     // 添加MapPoints顶点：
     for(int i = 0; i < n; i++){
         MapPoint* pMP = mapPoints[i];
@@ -79,6 +80,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
             e->Xw[1] = pMP->GetWorldPos().y;
             e->Xw[2] = pMP->GetWorldPos().z;
 
+            e->setInformation(Eigen::Matrix2d::Identity());
             // 设置鲁棒和函数
             g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber();
             rk->setDelta(deltaMono);
@@ -106,7 +108,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
         for(size_t j = 0; j < monoEdges.size(); j++){
             auto* e = monoEdges[j];
             int idx = monoEdgesIdx[j];
-            if(outlier[idx]){
+            if(outlier[idx]){ // 上一次标记为outlier的点，因为没有参与本次优化，不知道当前的误差，所以需要单独计算
                 e->computeError();
             }
             float chi2 = e->chi2();
@@ -126,7 +128,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
 
     g2o::VertexSE3Expmap* vSE3_opt = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
     g2o::SE3Quat SE3Quat_opt = vSE3_opt->estimate();
-    Tcw = Converter::SE3toT(SE3Quat_opt);
+    Tcw = Converter::SE3toT(SE3Quat_opt).clone();
     return monoEdges.size() - nBad;
 }
 

@@ -38,10 +38,16 @@ public:
 
     std::vector<MapPoint*> GetMapPoints() const;
 
+    std::vector<cv::Point2f> GetPoints() const;
+
+    void SetMatchKPWithMP(const std::vector<int>& matchKPWithMP);
+    std::vector<int> GetMatchKPWithMP() const;
+
 private:
     std::vector<MapPoint*> mvpMapPoints;
     std::vector<cv::KeyPoint> mvKeyPoints;
     std::vector<cv::KeyPoint> mvKeyPointsUn;
+    std::vector<int> mvMatchKPWithMP;
     cv::Mat mDescriptions;
 
     cv::Mat mRcw;

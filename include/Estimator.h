@@ -88,6 +88,8 @@ private:
     void UpdateVelocity();
     bool TrackWithKeyFrame();
     std::vector<int> SearchByProjection(const std::vector<MapPoint*>& mapPoints, const cv::Mat& Tcw);
+    int SearchByProjection(std::vector<MapPoint*>& vMapPoints, std::vector<cv::Point2f>& vPointsUn);
     cv::Point2f project(const cv::Mat& pt3d) const;
+    bool TrackWithinSlidingWindow();
 };
 }

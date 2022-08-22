@@ -83,4 +83,20 @@ std::vector<MapPoint*> KeyFrame::GetMapPoints() const {
     return mvpMapPoints;
 }
 
+std::vector<cv::Point2f> KeyFrame::GetPoints() const {
+    std::vector<cv::Point2f> points(mvKeyPoints.size());
+    for (size_t i = 0; i < mvKeyPoints.size(); i++){
+        points[i] = mvKeyPoints[i].pt;
+    }
+    return points;
+}
+
+void KeyFrame::SetMatchKPWithMP(const std::vector<int> &matchKPWithMP) {
+    mvMatchKPWithMP = matchKPWithMP;
+}
+
+std::vector<int> KeyFrame::GetMatchKPWithMP() const {
+    return mvMatchKPWithMP;
+}
+
 }
