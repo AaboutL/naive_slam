@@ -15,13 +15,12 @@ set(OpenCV_DIR "/home/aal/3rdparty/opencv-3.4.16/share/OpenCV")
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV 3.4 REQUIRED)
 find_package(G2O REQUIRED)
-#find_package(Glog REQUIRED)
 include_directories(${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
-#        ${GLOG_INCLUDE_DIRS}
+    /home/aal/3rdparty/DBoW2
         )
 
 FILE(GLOB CPPS ${PROJECT_SOURCE_DIR}/src/*)
@@ -31,6 +30,7 @@ add_library(${PROJECT_NAME} SHARED
 target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}
     ${G2O_LIBS}
+    /home/aal/3rdparty/DBoW2/lib/libDBoW2.so
     glog
     )
 

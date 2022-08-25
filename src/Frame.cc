@@ -30,7 +30,8 @@ Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpOR
 {}
 
 Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
-             const int imgWidth, const int imgHeight, const int cellSize, const int gridRows, const int gridCols):
+             int imgWidth, int imgHeight, int cellSize, int gridRows, int gridCols,
+             Vocabulary *pORBVocabulary):
              mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
              mflag(false),
              mRcw(cv::Mat::eye(3, 3, CV_32F)), mtcw(cv::Mat::zeros(3, 1, CV_32F)), mTcw(cv::Mat::eye(4, 4, CV_32F)),

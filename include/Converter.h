@@ -5,8 +5,10 @@
 #ifndef NAIVE_SLAM_CONVERTER_H
 #define NAIVE_SLAM_CONVERTER_H
 
+#include <vector>
 #include <Eigen/Dense>
 #include <g2o/types/sba/types_six_dof_expmap.h>
+#include <opencv2/opencv.hpp>
 
 namespace Naive_SLAM{
 
@@ -32,6 +34,23 @@ public:
             }
         }
         return T;
+    }
+
+    static cv::Mat toCvMat(const Eigen::Matrix<double,3,1> &m){
+        cv::Mat mat(3, 1, CV_32F);
+        for(int i = 0; i < 3; i++){
+            mat.at<float>(i) = m(i);
+        }
+        return mat.clone();
+    }
+
+    static std::vector<cv::Mat> DescriptionMatToVector(const cv::Mat& description){
+        std::vector<cv::Mat> vDesc;
+        vDesc.reserve(description.rows);
+        for(int j = 0; j < description.rows; j++){
+            vDesc.emplace_back(description.row(j));
+        }
+        return vDesc;
     }
 
 };

@@ -23,17 +23,23 @@ class KeyFrame;
 class MapPoint{
 public:
     MapPoint(const MapPoint& mapPoint);
-    MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF);
+    MapPoint(const cv::Mat& mp, KeyFrame* pRefKF);
     void AddKeyFrame(KeyFrame* pKF);
-    cv::Point3f GetWorldPos() const;
+    cv::Mat GetWorldPos() const;
+    void SetWorldPos(const cv::Mat& worldPos);
     void SetDescription(const cv::Mat& description);
     cv::Mat GetDescription() const;
 
+    void AddObservation(KeyFrame* pKF, int id);
+    void EraseObservation(KeyFrame* pKF);
+    int GetIdxInKF(KeyFrame* pKF);
+    int GetObsNum() const;
+
 private:
-    std::vector<std::pair<KeyFrame*, int>> mvObservations;
+    std::map<KeyFrame*, int> mmObservations; // 观察到此mappoint的关键帧，以及对应关键点的索引
     std::vector<KeyFrame*> mvpKFs;
     KeyFrame* mpRefKF;
-    cv::Point3f mPoint;
+    cv::Mat mWorldPos;
     cv::Mat mDescription;
 
 };

@@ -12,6 +12,8 @@
 
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <DBoW2/FORB.h>
+#include <DBoW2/TemplatedVocabulary.h>
 
 #include "Frame.h"
 #include "MapPoint.h"
@@ -24,12 +26,14 @@ class MapPoint;
 class KeyFrame{
 public:
     explicit KeyFrame(const Frame& frame);
-    void AddMapPoint(MapPoint* mapPoint);
+    void AddMapPoint(int id, MapPoint* mapPoint);
 
     cv::Mat GetRotation() const;
     cv::Mat GetTranslation() const;
     cv::Mat GetRotationInv() const;
     cv::Mat GetCameraCenter() const;
+    cv::Mat GetTcw() const;
+    cv::Mat GetTwc() const;
 
     void SetRotation(const cv::Mat& Rcw);
     void SetTranslation(const cv::Mat& tcw);
@@ -37,11 +41,23 @@ public:
     void SetT(const cv::Mat& Rcw, const cv::Mat& tcw);
 
     std::vector<MapPoint*> GetMapPoints() const;
+    MapPoint* GetMapPoint(int id) const;
 
     std::vector<cv::Point2f> GetPoints() const;
+    cv::KeyPoint GetKeyPointUn(int id) const;
+    cv::Mat GetDescription(int id) const;
 
     void SetMatchKPWithMP(const std::vector<int>& matchKPWithMP);
     std::vector<int> GetMatchKPWithMP() const;
+    void ComputeBow();
+    DBoW2::BowVector GetBowVec() const;
+    DBoW2::FeatureVector GetFeatVec() const;
+
+    void EraseMapPoint(MapPoint* pMP);
+    void SetMapPoints(const std::vector<MapPoint*>& vpMPs);
+
+public:
+    int N;
 
 private:
     std::vector<MapPoint*> mvpMapPoints;
@@ -57,5 +73,8 @@ private:
     cv::Mat mtwc;
     cv::Mat mTwc;
 
+    Vocabulary *mpORBvocabulary;
+    DBoW2::BowVector mBowVector;
+    DBoW2::FeatureVector mFeatVector;
 };
 }

@@ -126,10 +126,124 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
             break;
     }
 
-    g2o::VertexSE3Expmap* vSE3_opt = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
+    g2o::VertexSE3Expmap* vSE3_opt = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
     g2o::SE3Quat SE3Quat_opt = vSE3_opt->estimate();
     Tcw = Converter::SE3toT(SE3Quat_opt).clone();
     return monoEdges.size() - nBad;
+}
+
+void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat& matK) {
+    g2o::SparseOptimizer optimizer;
+    optimizer.setVerbose(true);
+    std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver =
+            std::make_unique<g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>>();
+    std::unique_ptr<g2o::BlockSolver_6_3> solver_ptr =
+            std::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver));
+    auto* solver = new g2o::OptimizationAlgorithmLevenberg(std::move(solver_ptr));
+    optimizer.setAlgorithm(solver);
+
+    float thHuberMono = sqrt(5.991);
+
+    int vertexIdx = 0;
+    // 遍历滑窗内的关键帧，添加g2o的pose顶点
+    for(int i = 0; i < vpKFs.size(); i++){
+        KeyFrame* pKF = vpKFs[i];
+        auto* vSE3 = new g2o::VertexSE3Expmap();
+        vSE3->setEstimate(Converter::TtoSE3Quat(pKF->GetTcw()));
+        vSE3->setId(vertexIdx);
+        if(i == 0){
+            vSE3->setFixed(true);
+        }
+        optimizer.addVertex(vSE3);
+        vertexIdx++;
+    }
+
+    // 遍历滑窗中关键帧对应的地图点
+    std::map<MapPoint*, int> mMPWithIdx;
+    std::vector<g2o::EdgeSE3ProjectXYZ*> vpEdges;
+    std::vector<KeyFrame*> vpEdgeKFs;
+    std::vector<MapPoint*> vpEdgeMPs;
+    for(int i = 0; i < vpKFs.size(); i++){
+        KeyFrame* pKF = vpKFs[i];
+        std::vector<MapPoint*> vpMPs = pKF->GetMapPoints();
+        for(int j = 0; j < vpMPs.size(); j++){
+            MapPoint* pMP = vpMPs[j];
+            if(pMP){
+                auto *e = new g2o::EdgeSE3ProjectXYZ();
+                if(mMPWithIdx.find(pMP) == mMPWithIdx.end()) {
+                    auto *vPoint = new g2o::VertexPointXYZ();
+                    vPoint->setId(vertexIdx);
+                    vPoint->setMarginalized(true);
+                    optimizer.addVertex(vPoint);
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(vertexIdx)));
+                    mMPWithIdx[pMP] = vertexIdx;
+                    vertexIdx++;
+                }
+                else{
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(mMPWithIdx[pMP])));
+                }
+
+                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(i)));
+                Eigen::Matrix<double, 2, 1> obs;
+                cv::KeyPoint kpUn = pKF->GetKeyPointUn(j);
+                obs << kpUn.pt.x, kpUn.pt.y;
+                e->setMeasurement(obs);
+                e->setInformation(Eigen::Matrix2d::Identity());
+
+                auto *rk = new g2o::RobustKernelHuber();
+                rk->setDelta(thHuberMono);
+                e->setRobustKernel(rk);
+                e->fx = matK.at<float>(0, 0);
+                e->fy = matK.at<float>(1, 1);
+                e->cx = matK.at<float>(0, 2);
+                e->cy = matK.at<float>(1, 2);
+
+                optimizer.addEdge(e);
+
+                vpEdges.emplace_back(e);
+                vpEdgeKFs.emplace_back(pKF);
+                vpEdgeMPs.emplace_back(pMP);
+            }
+        }
+    }
+
+    // 第一遍优化
+    optimizer.initializeOptimization();
+    optimizer.optimize(5);
+
+    // 第二遍优化
+    for(size_t i = 0; i < vpEdges.size(); i++){
+        g2o::EdgeSE3ProjectXYZ* e = vpEdges[i];
+        MapPoint* pMP = vpEdgeMPs[i];
+        if(e->chi2() > 5.991 || !e->isDepthPositive()){
+            e->setLevel(1);
+        }
+        e->setRobustKernel(nullptr);
+    }
+    optimizer.initializeOptimization();
+    optimizer.optimize(10);
+
+    for(size_t i = 0; i < vpEdges.size(); i++){
+        g2o::EdgeSE3ProjectXYZ* e = vpEdges[i];
+        if(e->chi2() > 5.991 || !e->isDepthPositive()){
+            KeyFrame* pKF = vpEdgeKFs[i];
+            MapPoint* pMP = vpEdgeMPs[i];
+            pKF->EraseMapPoint(pMP);
+            pMP->EraseObservation(pKF);
+        }
+    }
+
+    for (int i = 0; i < vpKFs.size(); i++){
+        KeyFrame* pKF = vpKFs[i];
+        auto* vSE3 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(i));
+        g2o::SE3Quat SE3Quat = vSE3->estimate();
+        pKF->SetT(Converter::SE3toT(SE3Quat).clone());
+    }
+    for(auto & it : mMPWithIdx){
+        MapPoint* pMP = it.first;
+        auto* vPoint = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(it.second));
+        pMP->SetWorldPos(Converter::toCvMat(vPoint->estimate()));
+    }
 }
 
 }

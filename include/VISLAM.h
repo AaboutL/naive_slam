@@ -11,6 +11,8 @@
 
 #pragma once
 #include <iostream>
+#include <DBoW2/FORB.h>
+#include <DBoW2/TemplatedVocabulary.h>
 
 #include "Map.h"
 #include "KeyFrameDB.h"
@@ -19,12 +21,13 @@
 namespace Naive_SLAM{
 class VISLAM{
 public:
-    VISLAM(std::string& paramFilePath);
+    VISLAM(std::string& paramFilePath, std::string& vocabularyPath);
     void Run(const cv::Mat& image, const double& timestamp);
 private:
     Map* mpMap;
     KeyFrameDB* mpKeyFrameDB;
     Estimator* mpEstimator;
+    DBoW2::TemplatedVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB> *mpORBvocabulary;
 
 };
 }

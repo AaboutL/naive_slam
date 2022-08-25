@@ -9,9 +9,10 @@
  * Copyright (c) 2022 by hanfuyong, All Rights Reserved. 
  */
 #include "KeyFrame.h"
+#include "Converter.h"
 
 namespace Naive_SLAM{
-KeyFrame::KeyFrame(const Frame& frame){
+KeyFrame::KeyFrame(const Frame& frame):N(frame.N){
     mvKeyPoints = frame.mvKeyPoints;
     mvKeyPointsUn = frame.mvKeyPointsUn;
     mDescriptions = frame.mDescriptions;
@@ -21,11 +22,13 @@ KeyFrame::KeyFrame(const Frame& frame){
     mRwc = frame.GetRotationInv().clone();
     mtwc = frame.GetCameraCenter().clone();
     mTwc = frame.GetTwc();
+    mpORBvocabulary = frame.mpORBVocabulary;
+    mvpMapPoints.resize(frame.N, nullptr);
 }
 
-void KeyFrame::AddMapPoint(MapPoint* mapPoint){
+void KeyFrame::AddMapPoint(int id, MapPoint* mapPoint){
 //    mvpMapPoints.emplace_back(mapPoint);
-    mvpMapPoints.push_back(mapPoint);
+    mvpMapPoints[id] = mapPoint;
 }
 
 cv::Mat KeyFrame::GetRotation() const {
@@ -42,6 +45,14 @@ cv::Mat KeyFrame::GetRotationInv() const {
 
 cv::Mat KeyFrame::GetCameraCenter() const {
     return mtwc;
+}
+
+cv::Mat KeyFrame::GetTcw() const{
+    return mTcw;
+}
+
+cv::Mat KeyFrame::GetTwc() const{
+    return mTwc;
 }
 
 void KeyFrame::SetRotation(const cv::Mat& Rcw){
@@ -83,6 +94,12 @@ std::vector<MapPoint*> KeyFrame::GetMapPoints() const {
     return mvpMapPoints;
 }
 
+MapPoint* KeyFrame::GetMapPoint(int id) const {
+    if(mvMatchKPWithMP[id] == -1)
+        return nullptr;
+    return mvpMapPoints[mvMatchKPWithMP[id]];
+}
+
 std::vector<cv::Point2f> KeyFrame::GetPoints() const {
     std::vector<cv::Point2f> points(mvKeyPoints.size());
     for (size_t i = 0; i < mvKeyPoints.size(); i++){
@@ -91,12 +108,46 @@ std::vector<cv::Point2f> KeyFrame::GetPoints() const {
     return points;
 }
 
+cv::KeyPoint KeyFrame::GetKeyPointUn(int id) const {
+    return mvKeyPointsUn[id];
+}
+
+cv::Mat KeyFrame::GetDescription(int id) const {
+    return mDescriptions.row(id);
+}
+
 void KeyFrame::SetMatchKPWithMP(const std::vector<int> &matchKPWithMP) {
     mvMatchKPWithMP = matchKPWithMP;
 }
 
 std::vector<int> KeyFrame::GetMatchKPWithMP() const {
     return mvMatchKPWithMP;
+}
+
+void KeyFrame::ComputeBow() {
+    if(mBowVector.empty() || mFeatVector.empty()){
+        std::vector<cv::Mat> vDesc = Converter::DescriptionMatToVector(mDescriptions);
+        mpORBvocabulary->transform(vDesc, mBowVector, mFeatVector, 0);
+    }
+}
+
+DBoW2::BowVector KeyFrame::GetBowVec() const {
+    return mBowVector;
+}
+
+DBoW2::FeatureVector KeyFrame::GetFeatVec() const {
+    return mFeatVector;
+}
+
+void KeyFrame::EraseMapPoint(MapPoint *pMP) {
+    int idx = pMP->GetIdxInKF(this);
+    if(idx >= 0){
+        mvpMapPoints[idx] = nullptr;
+    }
+}
+
+void KeyFrame::SetMapPoints(const vector<MapPoint *> &vpMPs) {
+    mvpMapPoints = vpMPs;
 }
 
 }

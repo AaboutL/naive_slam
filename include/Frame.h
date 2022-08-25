@@ -16,6 +16,7 @@
 
 #include "ORBextractor.h"
 //#include "MapPoint.h"
+#include "Vocabulary.h"
 
 namespace Naive_SLAM{
 
@@ -28,7 +29,8 @@ public:
     Frame(){}
     Frame(const Frame& frame);
     Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef,
-        const int imgWidth, const int imgHeight, const int cellSize, const int gridRows, const int gridCols);
+        int imgWidth, int imgHeight, int cellSize, int gridRows, int gridCols,
+        Vocabulary *pORBVocabulary);
     void ExtractORB(const cv::Mat& img);
 
 
@@ -54,6 +56,7 @@ public:
     static float cx;
     static float cy;
     cv::Mat mDistCoef;
+    Vocabulary *mpORBVocabulary;
 
 public:
     std::vector<std::size_t>** GetGrid() const;
@@ -90,10 +93,8 @@ private:
     int mCellSize;
     int mGridRows;
     int mGridCols;
-//    std::vector<std::vector<std::vector<std::size_t>>> mGrid;
     std::vector<std::size_t>** mGrid;
 
-//    std::vector<MapPoint*> mvpMapPoints;
 
 };
 

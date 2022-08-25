@@ -13,34 +13,55 @@
 namespace Naive_SLAM{
 
 MapPoint::MapPoint(const MapPoint& mapPoint){
-    mvObservations = mapPoint.mvObservations;
-    mvpKFs = mapPoint.mvpKFs;
+    mmObservations = mapPoint.mmObservations;
     mpRefKF = mapPoint.mpRefKF;
-    mPoint = mapPoint.mPoint;
-    mDescription = mapPoint.mDescription;
-
+    mapPoint.mWorldPos.copyTo(mWorldPos);
+    mapPoint.mDescription.copyTo(mDescription);
 }
 
-MapPoint::MapPoint(const cv::Point3f& mp, KeyFrame* pRefKF){
-    mPoint = mp;
+MapPoint::MapPoint(const cv::Mat& mp, KeyFrame* pRefKF){
+    mWorldPos = mp.clone();
     mpRefKF = pRefKF;
-    mvpKFs.emplace_back(pRefKF);
 }
 
 void MapPoint::AddKeyFrame(KeyFrame* pKF){
     mvpKFs.emplace_back(pKF);
 }
 
-cv::Point3f MapPoint::GetWorldPos() const {
-    return mPoint;
+cv::Mat MapPoint::GetWorldPos() const {
+    return mWorldPos;
 }
 
-void MapPoint::SetDescription(const cv::Mat& description){
-    mDescription = description;
+void MapPoint::SetWorldPos(const cv::Mat &worldPos) {
+    mWorldPos = worldPos;
 }
 
 cv::Mat MapPoint::GetDescription() const {
     return mDescription;
 }
+
+void MapPoint::AddObservation(KeyFrame *pKF, int id) {
+    mmObservations[pKF] = id;
+
+}
+
+void MapPoint::EraseObservation(KeyFrame *pKF) {
+    mmObservations.erase(pKF);
+    if(pKF == mpRefKF){
+        mpRefKF = mmObservations.begin()->first;
+    }
+}
+
+int MapPoint::GetIdxInKF(KeyFrame *pKF) {
+    if(mmObservations.count(pKF))
+        return mmObservations[pKF];
+    else
+        return -1;
+}
+
+int MapPoint::GetObsNum() const {
+    return static_cast<int>(mmObservations.size());
+}
+
 
 }
