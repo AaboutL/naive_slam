@@ -15,11 +15,16 @@ namespace Naive_SLAM{
 
 VISLAM::VISLAM(std::string& paramFilePath,
                std::string& vocabularyPath){
-    mpORBvocabulary = new DBoW2::TemplatedVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>();
+    mpORBvocabulary = new Vocabulary();
+
+    std::cout << "[VISLAM] loading vocabulary..." << std::endl;
     mpORBvocabulary->loadFromTextFile(vocabularyPath);
-    mpEstimator = new Estimator(paramFilePath, mpMap, mpKeyFrameDB);
-    mpKeyFrameDB = new KeyFrameDB();
+//    mpORBvocabulary->loadFromBinaryFile(vocabularyPath);
+    std::cout << "[VISLAM] vocabulary loaded" << std::endl;
+
     mpMap = new Map();
+    mpKeyFrameDB = new KeyFrameDB();
+    mpEstimator = new Estimator(paramFilePath, mpMap, mpKeyFrameDB, mpORBvocabulary);
 }
 
 void VISLAM::Run(const cv::Mat& image, const double& timestamp){

@@ -36,6 +36,10 @@ void MapPoint::SetWorldPos(const cv::Mat &worldPos) {
     mWorldPos = worldPos;
 }
 
+void MapPoint::SetDescription(const cv::Mat& description){
+    mDescription = description;
+}
+
 cv::Mat MapPoint::GetDescription() const {
     return mDescription;
 }

@@ -37,6 +37,9 @@ target_link_libraries(${PROJECT_NAME}
 add_executable(main main.cc)
 target_link_libraries(main ${PROJECT_NAME})
 
+add_executable(vocTxt2Bin vocTxt2Bin.cc)
+target_link_libraries(vocTxt2Bin ${PROJECT_NAME})
+
 #add_executable(test test.cc)
 #target_link_libraries(test ${PROJECT_NAME})
 #

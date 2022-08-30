@@ -14,7 +14,8 @@ namespace Naive_SLAM{
 class Optimization{
 public:
     static int PoseOptimize(const std::vector<cv::Point2f>& ptsUn, const std::vector<MapPoint*>& mapPoints,
-                             const cv::Mat& matK, cv::Mat& Tcw, std::vector<bool>& outlier);
+                             const cv::Mat& matK, cv::Mat& Tcw, std::vector<bool>& outlier,
+                             std::vector<float>& chi2s);
 
     static void SlidingWindowBA(std::vector<KeyFrame*>& vKFs, const cv::Mat& matK);
 };

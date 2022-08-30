@@ -53,6 +53,12 @@ public:
         return vDesc;
     }
 
+    static Eigen::Vector3d cvMatToEigenVector(const cv::Mat& m){
+        Eigen::Vector3d eVec;
+        eVec << m.at<float>(0), m.at<float>(1), m.at<float>(2);
+        return eVec;
+    }
+
 };
 
 }

@@ -12,9 +12,11 @@
 #include "Map.h"
 
 namespace Naive_SLAM{
+
 void Map::AddMapPoint(MapPoint* mapPoint){
     mvpMapPoints.emplace_back(mapPoint);
 }
+
 void Map::InsertMapPoints(const std::vector<MapPoint*>& mapPoints) {
     mvpMapPoints.insert(mvpMapPoints.end(), mapPoints.begin(), mapPoints.end());
 }

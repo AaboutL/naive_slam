@@ -37,7 +37,9 @@ int main(int argc, char** argv){
 //    google::InitGoogleLogging(argv[0]);
     std::string dataPath = "/home/aal/workspace/dataset/EuRoC/mav0/cam0/";
     std::string strParamFile = "../config.yaml";
-    VISLAM vislam(strParamFile);
+    std::string strVocabularyPath = "/home/aal/3rdparty/DBoW2/Vocabulary/ORBvoc.txt";
+//    std::string strVocabularyPath = "/home/aal/3rdparty/DBoW2/Vocabulary/ORBvoc.bin";
+    VISLAM vislam(strParamFile, strVocabularyPath);
     std::vector<std::string> vstrTimeStamp = ReadData(dataPath);
 
     std::string strTimeStamp;
@@ -45,9 +47,9 @@ int main(int argc, char** argv){
         strTimeStamp = vstrTimeStamp[i];
         double timestamp = std::stod(strTimeStamp) / 1e9;
         std::string path = dataPath + "data/" + strTimeStamp + ".png";
-        std::cout << path << std::endl;
+        std::cout << std::endl << std::endl;
+        std::cout << path << "    Img id: " << i << std::endl;
         cv::Mat image = cv::imread(path);
-//        LOG(INFO) << "test log";
         vislam.Run(image, timestamp);
     }
     return 0;

@@ -16,10 +16,11 @@
 namespace Naive_SLAM{
 
 int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std::vector<MapPoint *> &mapPoints,
-                                const cv::Mat &matK, cv::Mat& Tcw, std::vector<bool>& outlier) {
+                                const cv::Mat &matK, cv::Mat& Tcw, std::vector<bool>& outlier,
+                                std::vector<float>& chi2s) {
     // 定义g2o优化器，可看作总管
     g2o::SparseOptimizer optimizer;
-    optimizer.setVerbose(true);
+//    optimizer.setVerbose(true);
 
     // 定义线性求解器，是BlockSolver类中的成员。
     // LinearSolverType是在BlockSolver类中对LinearSolver类的一个类型定义
@@ -76,9 +77,9 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
             e->setMeasurement(obs);
 
             // 设置地图点的空间位置
-            e->Xw[0] = pMP->GetWorldPos().x;
-            e->Xw[1] = pMP->GetWorldPos().y;
-            e->Xw[2] = pMP->GetWorldPos().z;
+            e->Xw[0] = pMP->GetWorldPos().at<float>(0);
+            e->Xw[1] = pMP->GetWorldPos().at<float>(1);
+            e->Xw[2] = pMP->GetWorldPos().at<float>(2);
 
             e->setInformation(Eigen::Matrix2d::Identity());
             // 设置鲁棒和函数
@@ -97,6 +98,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
 
     // 进行4次优化，每次优化迭代10次
     // 每次优化之后，把所有点对重新分成inlier和outlier，下次迭代只用inlier的数据进行优化
+    chi2s.resize(outlier.size(), 0);
     int nBad = 0;
     for(int k = 0; k < 4; k++){
         vSE3->setEstimate(Converter::TtoSE3Quat(Tcw));
@@ -112,6 +114,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
                 e->computeError();
             }
             float chi2 = e->chi2();
+            chi2s[idx] = chi2;
             if(chi2 < chi2Mono){
                 outlier[idx] = false;
                 e->setLevel(0); // level设置为0，表示参与优化
@@ -134,7 +137,7 @@ int Optimization::PoseOptimize(const std::vector<cv::Point2f> &ptsUn, const std:
 
 void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat& matK) {
     g2o::SparseOptimizer optimizer;
-    optimizer.setVerbose(true);
+//    optimizer.setVerbose(true);
     std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver =
             std::make_unique<g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>>();
     std::unique_ptr<g2o::BlockSolver_6_3> solver_ptr =
@@ -172,6 +175,7 @@ void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat& mat
                 auto *e = new g2o::EdgeSE3ProjectXYZ();
                 if(mMPWithIdx.find(pMP) == mMPWithIdx.end()) {
                     auto *vPoint = new g2o::VertexPointXYZ();
+                    vPoint->setEstimate(Converter::cvMatToEigenVector(pMP->GetWorldPos()));
                     vPoint->setId(vertexIdx);
                     vPoint->setMarginalized(true);
                     optimizer.addVertex(vPoint);
@@ -208,8 +212,10 @@ void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat& mat
     }
 
     // 第一遍优化
+    std::cout << "[SlidingWindowBA] first optimizing start..." << std::endl;
     optimizer.initializeOptimization();
     optimizer.optimize(5);
+    std::cout << "[SlidingWindowBA] first optimize done" << std::endl;
 
     // 第二遍优化
     for(size_t i = 0; i < vpEdges.size(); i++){
@@ -220,8 +226,10 @@ void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat& mat
         }
         e->setRobustKernel(nullptr);
     }
+    std::cout << "[SlidingWindowBA] second optimizing start..." << std::endl;
     optimizer.initializeOptimization();
     optimizer.optimize(10);
+    std::cout << "[SlidingWindowBA] second optimize done" << std::endl;
 
     for(size_t i = 0; i < vpEdges.size(); i++){
         g2o::EdgeSE3ProjectXYZ* e = vpEdges[i];

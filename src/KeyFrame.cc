@@ -95,9 +95,7 @@ std::vector<MapPoint*> KeyFrame::GetMapPoints() const {
 }
 
 MapPoint* KeyFrame::GetMapPoint(int id) const {
-    if(mvMatchKPWithMP[id] == -1)
-        return nullptr;
-    return mvpMapPoints[mvMatchKPWithMP[id]];
+    return mvpMapPoints[id];
 }
 
 std::vector<cv::Point2f> KeyFrame::GetPoints() const {
@@ -127,7 +125,7 @@ std::vector<int> KeyFrame::GetMatchKPWithMP() const {
 void KeyFrame::ComputeBow() {
     if(mBowVector.empty() || mFeatVector.empty()){
         std::vector<cv::Mat> vDesc = Converter::DescriptionMatToVector(mDescriptions);
-        mpORBvocabulary->transform(vDesc, mBowVector, mFeatVector, 0);
+        mpORBvocabulary->transform(vDesc, mBowVector, mFeatVector, 4);
     }
 }
 

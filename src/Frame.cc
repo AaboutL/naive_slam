@@ -21,7 +21,7 @@ Frame::Frame(const Frame& frame): N(frame.N), mTimeStamp(frame.mTimeStamp), mpOR
                                   mvPointsUn(frame.mvPointsUn), mvL0KPIndices(frame.mvL0KPIndices), mvMapPointIndices(frame.mvMapPointIndices),
                                   mDescriptions(frame.mDescriptions.clone()), mImg(frame.mImg.clone()),
                                   mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone()),
-                                  mflag(false),
+                                  mpORBVocabulary(frame.mpORBVocabulary), mflag(false),
                                   mRcw(frame.mRcw.clone()), mtcw(frame.mtcw.clone()), mTcw(frame.mTcw.clone()),
                                   mRwc(frame.mRwc.clone()), mtwc(frame.mtwc.clone()), mTwc(frame.mTwc.clone()),
                                   mImgWidth(frame.mImgWidth), mImgHeight(frame.mImgHeight),
@@ -33,7 +33,7 @@ Frame::Frame(const cv::Mat &img, const double& timestamp, ORBextractor* extracto
              int imgWidth, int imgHeight, int cellSize, int gridRows, int gridCols,
              Vocabulary *pORBVocabulary):
              mTimeStamp(timestamp), mpORBextractor(extractor), mImg(img.clone()), mK(K.clone()), mDistCoef(distCoef.clone()),
-             mflag(false),
+             mpORBVocabulary(pORBVocabulary), mflag(false),
              mRcw(cv::Mat::eye(3, 3, CV_32F)), mtcw(cv::Mat::zeros(3, 1, CV_32F)), mTcw(cv::Mat::eye(4, 4, CV_32F)),
              mRwc(cv::Mat::eye(3, 3, CV_32F)), mtwc(cv::Mat::zeros(3, 1, CV_32F)), mTwc(cv::Mat::eye(4, 4, CV_32F)),
              mImgWidth(imgWidth), mImgHeight(imgHeight), mCellSize(cellSize), mGridRows(gridRows), mGridCols(gridCols){

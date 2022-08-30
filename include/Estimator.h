@@ -78,7 +78,8 @@ private:
 
     cv::Mat mLastestKFImg;
 
-    int mnMatchInliers;
+    int mnKeyFrameMatchInliers;
+    int mnSlidingWindowMatchInliers;
     Vocabulary *mpORBVocabulary;
 
     int mSlidingWindowSize;
