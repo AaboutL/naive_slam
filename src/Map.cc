@@ -14,15 +14,11 @@
 namespace Naive_SLAM{
 
 void Map::AddMapPoint(MapPoint* mapPoint){
-    mvpMapPoints.emplace_back(mapPoint);
+    mspMapPoints.insert(mapPoint);
 }
 
-void Map::InsertMapPoints(const std::vector<MapPoint*>& mapPoints) {
-    mvpMapPoints.insert(mvpMapPoints.end(), mapPoints.begin(), mapPoints.end());
-}
-
-MapPoint* Map::GetMapPoint(int id){
-    return mvpMapPoints[id];
+void Map::InsertMapPoints(const std::set<MapPoint*>& mapPoints) {
+    mspMapPoints.insert(mapPoints.begin(), mapPoints.end());
 }
 
 }

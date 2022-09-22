@@ -12,18 +12,19 @@
 #include "Converter.h"
 
 namespace Naive_SLAM{
-KeyFrame::KeyFrame(const Frame& frame):N(frame.N){
-    mvKeyPoints = frame.mvKeyPoints;
-    mvKeyPointsUn = frame.mvKeyPointsUn;
-    mDescriptions = frame.mDescriptions;
-    mRcw = frame.GetRotation().clone();
-    mtcw = frame.GetTranslation().clone();
-    mTcw = frame.GetTcw();
-    mRwc = frame.GetRotationInv().clone();
-    mtwc = frame.GetCameraCenter().clone();
-    mTwc = frame.GetTwc();
+KeyFrame::KeyFrame(const Frame& frame):N(frame.N), mK(frame.mK), mDistCoef(frame.mDistCoef),
+mvKeyPoints(frame.mvKeyPoints),
+mvKeyPointsUn(frame.mvKeyPointsUn),mDescriptions(frame.mDescriptions.clone()),
+mRcw(frame.GetRotation().clone()), mtcw(frame.GetTranslation().clone()),
+mTcw(frame.GetTcw().clone()), mRwc(frame.GetRotationInv().clone()),
+mtwc(frame.GetCameraCenter().clone()), mTwc(frame.GetTwc().clone()),
+mvScaleFactors(frame.mvScaleFactors), mvLevelSigma2(frame.mvLevelSigma2),
+mvInvLevelSigma2(frame.mvInvLevelSigma2),
+mImgWidth(frame.mImgWidth), mImgHeight(frame.mImgHeight), mCellSize(frame.mCellSize),
+mGridRows(frame.mGridRows), mGridCols(frame.mGridCols), mGrid(frame.mGrid){
     mpORBvocabulary = frame.mpORBVocabulary;
     mvpMapPoints.resize(frame.N, nullptr);
+    ComputeBow();
 }
 
 void KeyFrame::AddMapPoint(int id, MapPoint* mapPoint){
@@ -106,6 +107,40 @@ std::vector<cv::Point2f> KeyFrame::GetPoints() const {
     return points;
 }
 
+std::vector<cv::Point2f> KeyFrame::GetPointsUn() const {
+    std::vector<cv::Point2f> points(mvKeyPointsUn.size());
+    for (size_t i = 0; i < mvKeyPointsUn.size(); i++){
+        points[i] = mvKeyPointsUn[i].pt;
+    }
+    return points;
+}
+
+std::vector<cv::Point2f> KeyFrame::GetPointsLevel0() const {
+    std::vector<cv::Point2f> points;
+    points.reserve(mvKeyPoints.size() / 2);
+    for (const auto & mvKeyPoint : mvKeyPoints){
+        if(mvKeyPoint.octave==0) {
+            points.emplace_back(mvKeyPoint.pt);
+        }
+    }
+    return points;
+}
+
+std::vector<cv::Point2f> KeyFrame::GetPointsUnLevel0() const {
+    std::vector<cv::Point2f> points;
+    points.reserve(mvKeyPointsUn.size() / 2);
+    for (const auto & mvKeyPoint : mvKeyPointsUn){
+        if(mvKeyPoint.octave==0) {
+            points.emplace_back(mvKeyPoint.pt);
+        }
+    }
+    return points;
+}
+
+cv::KeyPoint KeyFrame::GetKeyPoint(int id) const {
+    return mvKeyPoints[id];
+}
+
 cv::KeyPoint KeyFrame::GetKeyPointUn(int id) const {
     return mvKeyPointsUn[id];
 }
@@ -141,11 +176,35 @@ void KeyFrame::EraseMapPoint(MapPoint *pMP) {
     int idx = pMP->GetIdxInKF(this);
     if(idx >= 0){
         mvpMapPoints[idx] = nullptr;
+        std::cout << "mp id=" << idx << " erase MP in KF" << std::endl;
     }
 }
 
 void KeyFrame::SetMapPoints(const vector<MapPoint *> &vpMPs) {
     mvpMapPoints = vpMPs;
+}
+
+std::vector<float> KeyFrame::GetScaleFactors() const {
+    return mvScaleFactors;
+}
+
+std::vector<float> KeyFrame::GetLevelSigma2() const {
+    return mvLevelSigma2;
+}
+
+std::vector<float> KeyFrame::GetInvLevelSigma2() const {
+    return mvInvLevelSigma2;
+}
+
+cv::Mat KeyFrame::ComputeFundamental(KeyFrame *pKF) {
+    cv::Mat R2w = pKF->GetRotation();
+    cv::Mat t2w = pKF->GetTranslation();
+    cv::Mat R12 = mRcw * R2w.t();
+    cv::Mat t12 = -R12 * t2w + mtcw;
+    cv::Mat t12_skew = cv::Mat(cv::Matx33f(0, -t12.at<float>(2, 0), t12.at<float>(1, 0),
+                                           t12.at<float>(2, 0), 0, -t12.at<float>(0, 0),
+                                           t12.at<float>(2, 0), t12.at<float>(0, 0), 0));
+    return mK.t().inv() * t12_skew * R12 * mK.inv();
 }
 
 }

@@ -9,7 +9,8 @@
  * Copyright (c) 2022 by hanfuyong, All Rights Reserved. 
  */
 
-#pragma once
+#ifndef NAIVE_SLAM_RRAME_H
+#define NAIVE_SLAM_RRAME_H
 
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -58,6 +59,7 @@ public:
     cv::Mat mDistCoef;
     Vocabulary *mpORBVocabulary;
 
+
 public:
     std::vector<std::size_t>** GetGrid() const;
     void SetKeyPointsAndMapPointsMatchIdx(const std::vector<int>& mapPointsIdx);
@@ -80,7 +82,6 @@ private:
     void AssignGrid();
 
 private:
-    bool mflag;
     cv::Mat mRcw;
     cv::Mat mtcw;
     cv::Mat mTcw;
@@ -88,14 +89,18 @@ private:
     cv::Mat mtwc; // == camera center in world frame
     cv::Mat mTwc;
 
+public:
     int mImgWidth;
     int mImgHeight;
     int mCellSize;
     int mGridRows;
     int mGridCols;
     std::vector<std::size_t>** mGrid;
-
+    std::vector<float> mvScaleFactors;
+    std::vector<float> mvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;
 
 };
 
 }
+#endif

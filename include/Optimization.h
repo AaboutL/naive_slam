@@ -13,7 +13,8 @@ namespace Naive_SLAM{
 
 class Optimization{
 public:
-    static int PoseOptimize(const std::vector<cv::Point2f>& ptsUn, const std::vector<MapPoint*>& mapPoints,
+    static int PoseOptimize(const std::vector<cv::KeyPoint>& vKPsUn, const std::vector<MapPoint*>& mapPoints,
+                             const std::vector<float>& vInvLevelSigma2,
                              const cv::Mat& matK, cv::Mat& Tcw, std::vector<bool>& outlier,
                              std::vector<float>& chi2s);
 

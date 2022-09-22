@@ -1,6 +1,5 @@
 %YAML:1.0
 
-# Camera calibration and distortion parameters (OpenCV) 
 Camera.fx: 458.654
 Camera.fy: 457.296
 Camera.cx: 367.215
@@ -17,8 +16,8 @@ Camera.height: 480
 
 Camera.fps: 20
 
-feature_num: 500
-pyramid_num: 1
+feature_num: 1000
+pyramid_num: 8
 level_factor: 1.2
 FAST_th_init: 20
 FAST_th_min: 7

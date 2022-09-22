@@ -34,6 +34,7 @@ public:
     void EraseObservation(KeyFrame* pKF);
     int GetIdxInKF(KeyFrame* pKF);
     int GetObsNum() const;
+    bool IsBad() const;
 
 private:
     std::map<KeyFrame*, int> mmObservations; // 观察到此mappoint的关键帧，以及对应关键点的索引
@@ -41,7 +42,7 @@ private:
     KeyFrame* mpRefKF;
     cv::Mat mWorldPos;
     cv::Mat mDescription;
-
+    bool bBad;
 };
 
 }

@@ -17,11 +17,13 @@ MapPoint::MapPoint(const MapPoint& mapPoint){
     mpRefKF = mapPoint.mpRefKF;
     mapPoint.mWorldPos.copyTo(mWorldPos);
     mapPoint.mDescription.copyTo(mDescription);
+    bBad = false;
 }
 
 MapPoint::MapPoint(const cv::Mat& mp, KeyFrame* pRefKF){
     mWorldPos = mp.clone();
     mpRefKF = pRefKF;
+    bBad = false;
 }
 
 void MapPoint::AddKeyFrame(KeyFrame* pKF){
@@ -51,6 +53,8 @@ void MapPoint::AddObservation(KeyFrame *pKF, int id) {
 
 void MapPoint::EraseObservation(KeyFrame *pKF) {
     mmObservations.erase(pKF);
+    if(mmObservations.empty())
+        bBad = true;
     if(pKF == mpRefKF){
         mpRefKF = mmObservations.begin()->first;
     }
@@ -65,6 +69,10 @@ int MapPoint::GetIdxInKF(KeyFrame *pKF) {
 
 int MapPoint::GetObsNum() const {
     return static_cast<int>(mmObservations.size());
+}
+
+bool MapPoint::IsBad() const {
+    return bBad;
 }
 
 

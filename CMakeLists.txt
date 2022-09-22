@@ -25,7 +25,7 @@ include_directories(${PROJECT_SOURCE_DIR}
 
 FILE(GLOB CPPS ${PROJECT_SOURCE_DIR}/src/*)
 add_library(${PROJECT_NAME} SHARED
-    ${CPPS} include/tools.h)
+    ${CPPS})
 
 target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}

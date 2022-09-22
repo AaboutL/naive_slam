@@ -44,6 +44,10 @@ public:
     MapPoint* GetMapPoint(int id) const;
 
     std::vector<cv::Point2f> GetPoints() const;
+    std::vector<cv::Point2f> GetPointsUn() const;
+    std::vector<cv::Point2f> GetPointsLevel0() const;
+    std::vector<cv::Point2f> GetPointsUnLevel0() const;
+    cv::KeyPoint GetKeyPoint(int id) const;
     cv::KeyPoint GetKeyPointUn(int id) const;
     cv::Mat GetDescription(int id) const;
 
@@ -55,11 +59,18 @@ public:
 
     void EraseMapPoint(MapPoint* pMP);
     void SetMapPoints(const std::vector<MapPoint*>& vpMPs);
+    std::vector<float> GetScaleFactors() const;
+    std::vector<float> GetLevelSigma2() const;
+    std::vector<float> GetInvLevelSigma2() const;
+
+    cv::Mat ComputeFundamental(KeyFrame* pKF);
 
 public:
     int N;
 
 private:
+    cv::Mat mK;
+    cv::Mat mDistCoef;
     std::vector<MapPoint*> mvpMapPoints;
     std::vector<cv::KeyPoint> mvKeyPoints;
     std::vector<cv::KeyPoint> mvKeyPointsUn;
@@ -76,5 +87,17 @@ private:
     Vocabulary *mpORBvocabulary;
     DBoW2::BowVector mBowVector;
     DBoW2::FeatureVector mFeatVector;
+
+    std::vector<float> mvScaleFactors;
+    std::vector<float> mvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;
+
+public:
+    int mImgWidth;
+    int mImgHeight;
+    int mCellSize;
+    int mGridRows;
+    int mGridCols;
+    std::vector<std::size_t>** mGrid;
 };
 }

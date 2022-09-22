@@ -18,8 +18,8 @@ VISLAM::VISLAM(std::string& paramFilePath,
     mpORBvocabulary = new Vocabulary();
 
     std::cout << "[VISLAM] loading vocabulary..." << std::endl;
-    mpORBvocabulary->loadFromTextFile(vocabularyPath);
-//    mpORBvocabulary->loadFromBinaryFile(vocabularyPath);
+//    mpORBvocabulary->loadFromTextFile(vocabularyPath);
+    mpORBvocabulary->loadFromBinaryFile(vocabularyPath);
     std::cout << "[VISLAM] vocabulary loaded" << std::endl;
 
     mpMap = new Map();

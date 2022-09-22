@@ -9,7 +9,8 @@
  * Copyright (c) 2022 by hanfuyong, All Rights Reserved. 
  */
 
-#pragma once
+#ifndef NAIVE_SLAM_VISLAM_H
+#define NAIVE_SLAM_VISLAM_H
 #include <iostream>
 
 #include "Map.h"
@@ -30,3 +31,4 @@ private:
 
 };
 }
+#endif
