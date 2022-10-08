@@ -14,6 +14,7 @@ public:
     static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
     static int SearchByBow(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<int>& matches);
+    static int SearchByBow(KeyFrame* pKF, Frame& frame, std::vector<int>& matches);
 
     static int CollectMatches(const KeyFrame* pKF1, const KeyFrame* pKF2,
                                  std::vector<int>& vMatches, std::vector<int>& vMatchIdx,
@@ -35,6 +36,15 @@ public:
 
     static bool CheckDistEpipolarLine(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2,
                                       const cv::Mat &F12);
+
+    static int SearchByProjection(Frame& frame, const KeyFrame* pKF,
+                                  std::vector<MapPoint*>& vpMapPoints, const cv::Mat &Tcw,
+                                  float radiusTh);
+
+    static int SearchByProjection(Frame& frame, const std::set<MapPoint*>& spMapPoints,
+                                  std::vector<MapPoint *> &vpMapPoints);
+
+    static int SearchByBow(KeyFrame* pKF, Frame& frame, std::vector<MapPoint*>& vpMapPoints);
 };
 }
 

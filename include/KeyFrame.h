@@ -49,6 +49,8 @@ public:
     std::vector<cv::Point2f> GetPointsUnLevel0() const;
     cv::KeyPoint GetKeyPoint(int id) const;
     cv::KeyPoint GetKeyPointUn(int id) const;
+    std::vector<cv::KeyPoint> GetKeyPointsUn() const;
+
     cv::Mat GetDescription(int id) const;
 
     void SetMatchKPWithMP(const std::vector<int>& matchKPWithMP);
@@ -65,7 +67,10 @@ public:
 
     cv::Mat ComputeFundamental(KeyFrame* pKF);
 
+    int GetMapPointNum() const;
+
 public:
+    long int mnId;
     int N;
 
 private:
@@ -84,7 +89,7 @@ private:
     cv::Mat mtwc;
     cv::Mat mTwc;
 
-    Vocabulary *mpORBvocabulary;
+    Vocabulary *mpORBVocabulary;
     DBoW2::BowVector mBowVector;
     DBoW2::FeatureVector mFeatVector;
 

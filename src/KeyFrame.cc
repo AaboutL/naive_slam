@@ -12,8 +12,9 @@
 #include "Converter.h"
 
 namespace Naive_SLAM{
-KeyFrame::KeyFrame(const Frame& frame):N(frame.N), mK(frame.mK), mDistCoef(frame.mDistCoef),
-mvKeyPoints(frame.mvKeyPoints),
+
+KeyFrame::KeyFrame(const Frame& frame):mnId(frame.mnId), N(frame.N), mK(frame.mK),
+mDistCoef(frame.mDistCoef),mvKeyPoints(frame.mvKeyPoints),
 mvKeyPointsUn(frame.mvKeyPointsUn),mDescriptions(frame.mDescriptions.clone()),
 mRcw(frame.GetRotation().clone()), mtcw(frame.GetTranslation().clone()),
 mTcw(frame.GetTcw().clone()), mRwc(frame.GetRotationInv().clone()),
@@ -22,7 +23,7 @@ mvScaleFactors(frame.mvScaleFactors), mvLevelSigma2(frame.mvLevelSigma2),
 mvInvLevelSigma2(frame.mvInvLevelSigma2),
 mImgWidth(frame.mImgWidth), mImgHeight(frame.mImgHeight), mCellSize(frame.mCellSize),
 mGridRows(frame.mGridRows), mGridCols(frame.mGridCols), mGrid(frame.mGrid){
-    mpORBvocabulary = frame.mpORBVocabulary;
+    mpORBVocabulary = frame.mpORBVocabulary;
     mvpMapPoints.resize(frame.N, nullptr);
     ComputeBow();
 }
@@ -145,6 +146,10 @@ cv::KeyPoint KeyFrame::GetKeyPointUn(int id) const {
     return mvKeyPointsUn[id];
 }
 
+std::vector<cv::KeyPoint> KeyFrame::GetKeyPointsUn() const {
+    return mvKeyPointsUn;
+}
+
 cv::Mat KeyFrame::GetDescription(int id) const {
     return mDescriptions.row(id);
 }
@@ -160,7 +165,7 @@ std::vector<int> KeyFrame::GetMatchKPWithMP() const {
 void KeyFrame::ComputeBow() {
     if(mBowVector.empty() || mFeatVector.empty()){
         std::vector<cv::Mat> vDesc = Converter::DescriptionMatToVector(mDescriptions);
-        mpORBvocabulary->transform(vDesc, mBowVector, mFeatVector, 4);
+        mpORBVocabulary->transform(vDesc, mBowVector, mFeatVector, 4);
     }
 }
 
@@ -176,7 +181,6 @@ void KeyFrame::EraseMapPoint(MapPoint *pMP) {
     int idx = pMP->GetIdxInKF(this);
     if(idx >= 0){
         mvpMapPoints[idx] = nullptr;
-        std::cout << "mp id=" << idx << " erase MP in KF" << std::endl;
     }
 }
 
@@ -205,6 +209,16 @@ cv::Mat KeyFrame::ComputeFundamental(KeyFrame *pKF) {
                                            t12.at<float>(2, 0), 0, -t12.at<float>(0, 0),
                                            t12.at<float>(2, 0), t12.at<float>(0, 0), 0));
     return mK.t().inv() * t12_skew * R12 * mK.inv();
+}
+
+int KeyFrame::GetMapPointNum() const {
+    int nMPNum = 0;
+    for(int i = 0; i < N; i++){
+        MapPoint* pMP = mvpMapPoints[i];
+        if(pMP && !pMP->IsBad())
+            nMPNum++;
+    }
+    return nMPNum;
 }
 
 }

@@ -16,7 +16,7 @@
 namespace Naive_SLAM {
 
     int Optimization::PoseOptimize(const std::vector<cv::KeyPoint> &vKPsUn,
-                                   const std::vector<MapPoint *> &vMPs,
+                                   std::vector<MapPoint *> &vMPs,
                                    const std::vector<float>& vInvLevelSigma2,
                                    const cv::Mat &matK, cv::Mat &Tcw, std::vector<bool> &outlier,
                                    std::vector<float> &chi2s) {
@@ -133,10 +133,18 @@ namespace Naive_SLAM {
                 break;
         }
 
+        for(int i = 0; i < N; i++){
+            if(outlier[i]){
+                vMPs[i] = nullptr;
+            }
+        }
+
         g2o::VertexSE3Expmap *vSE3_opt = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(0));
         g2o::SE3Quat SE3Quat_opt = vSE3_opt->estimate();
         Tcw = Converter::SE3toT(SE3Quat_opt).clone();
-        return monoEdges.size() - nBad;
+        int nInlierNum = monoEdges.size() - nBad;
+        std::cout << "[Optimization::PoseOptimize] g2o inliers num=" << nInlierNum << std::endl;
+        return nInlierNum;
     }
 
     void Optimization::SlidingWindowBA(vector<KeyFrame *> &vpKFs, const cv::Mat &matK) {
@@ -269,6 +277,47 @@ namespace Naive_SLAM {
             auto *vPoint = dynamic_cast<g2o::VertexPointXYZ *>(optimizer.vertex(it.second));
             pMP->SetWorldPos(Converter::toCvMat(vPoint->estimate()));
         }
+    }
+
+    bool Optimization::SolvePnP(const std::vector<cv::Point2f>& vPtsUn,
+                                vector<MapPoint *> &vpMapPoints, const cv::Mat& K, cv::Mat& Tcw) {
+        std::vector<cv::Point3f> vPts3D;
+        std::vector<cv::Point2f> vPts2D;
+        std::vector<int> vMatchIdx;
+        for (int id = 0; id < vPtsUn.size(); id++) {
+            MapPoint* pMP = vpMapPoints[id];
+            if (!pMP || pMP->IsBad())
+                continue;
+            vMatchIdx.emplace_back(id);
+            vPts3D.emplace_back(pMP->GetWorldPos());
+            vPts2D.emplace_back(vPtsUn[id]);
+        }
+        std::cout << "[Optimization::SolvePnP] 3D 2D matched for PnP num=" << vPts3D.size() << std::endl;
+        if(vPts3D.empty())
+            return false;
+        cv::Mat rcw, tcw, Rcw, inliers;
+        cv::solvePnPRansac(vPts3D, vPts2D, K, cv::Mat::zeros(4, 1, CV_32F),
+                           rcw, tcw, false, 100, 4, 0.99, inliers, cv::SOLVEPNP_EPNP);
+        std::cout << "[Optimization::SolvePnP] pnp inliers num=" << inliers.total() << std::endl;
+        if(inliers.total() < 10)
+            return false;
+        cv::Rodrigues(rcw, Rcw);
+        Rcw.convertTo(Rcw, CV_32F);
+        tcw.convertTo(tcw, CV_32F);
+        Tcw = cv::Mat::eye(4, 4, CV_32F);
+        Rcw.copyTo(Tcw.rowRange(0, 3).colRange(0, 3));
+        tcw.copyTo(Tcw.rowRange(0, 3).col(3));
+
+        std::vector<int> vNoMatchIdx = vMatchIdx;
+        for(int k = 0; k < inliers.total(); k++){
+            vNoMatchIdx[inliers.at<int>(k)] = -1;
+        }
+        for(int k : vNoMatchIdx){
+            if(k != -1){
+                vpMapPoints[k] = nullptr;
+            }
+        }
+        return true;
     }
 
 }

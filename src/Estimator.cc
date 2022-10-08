@@ -37,7 +37,7 @@ namespace Naive_SLAM {
     Estimator::Estimator(const std::string &strParamFile, Map *pMap, KeyFrameDB *pKeyFrameDB,
                          Vocabulary *pORBVocabulary) :
             mState(NOT_INITIALIZED), mpKeyFrameDB(pKeyFrameDB), mpMap(pMap),
-            mpORBVocabulary(pORBVocabulary) {
+            mpORBVocabulary(pORBVocabulary), mbRelocalized(false) {
         cv::FileStorage fs(strParamFile.c_str(), cv::FileStorage::READ);
         if (!fs.isOpened()) {
             std::cout << "[Estimator] Param file not exist..." << std::endl;
@@ -98,58 +98,69 @@ namespace Naive_SLAM {
             }
             return;
         }
+
+        mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractor, mK, mDistCoef,
+                              mImgWidth, mImgHeight, mCellSize, mGridRows, mGridCols,
+                              mpORBVocabulary);
+        bool bOK;
         if (mState == OK) {
             std::cout << "SlidingWindow KFs num: " << mvpSlidingWindowKFs.size()
                       << "    MPs num: " << mspSlidingWindowMPs.size() << std::endl;
-            mCurrentFrame = Frame(mImGray, timestamp, mpORBExtractor, mK, mDistCoef,
-                                  mImgWidth, mImgHeight, mCellSize, mGridRows, mGridCols,
-                                  mpORBVocabulary);
 
-            KeyFrame* pKFtmp = mvpSlidingWindowKFs.back();
+            KeyFrame *pKFtmp = mvpSlidingWindowKFs.back();
             DrawPoints(mLastestKFImg, pKFtmp->GetPointsUn(), pKFtmp->GetMapPoints(), mK, mDistCoef,
                        pKFtmp->GetRotation(), pKFtmp->GetTranslation(), "LastestKFImg");
-            bool bOK1 = TrackWithKeyFrame();
-//            bool bOK = TrackWithOpticalFlow();
-            std::cout << "[Estimate::TrackWithKeyFrame] track state: " << bOK1 << std::endl;
+            bOK = TrackWithKeyFrame();
+            std::cout << "[Estimate::TrackWithKeyFrame] track state: " << bOK << std::endl;
 
-            bool bOK2 = TrackWithinSlidingWindow();
-            std::cout << "[Estimate::TrackWithinSlidingWindow] track state: " << bOK2 << std::endl;
+            if (bOK) {
+                bOK = TrackWithinSlidingWindow();
+            }
+        }
+        else{
+            bOK = Relocalization();
+        }
 
-            if (bOK1 || bOK2) {
-                if (!(bOK1 && bOK2)) {
-                    KeyFrame *pNewKF = CreateKeyFrame();
-                    // 新关键帧与滑窗中老的关键帧之间创建新的地图点
-                    CreateNewMapPoints(pNewKF);
-                    SlidingWindowBA();
-                    if (mvpSlidingWindowKFs.size() < mSlidingWindowSize) {
-                        mvpSlidingWindowKFs.emplace_back(pNewKF);
-                        // 同时，把新关键帧对应的mappoint插入到滑窗中
-                        for (auto *pMP: pNewKF->GetMapPoints()) {
+        if(bOK)
+            mState = OK;
+        else
+            mState = LOST;
+
+        if(bOK) {
+            if (NeedNewKeyFrame()) {
+                KeyFrame *pNewKF = CreateKeyFrame();
+                // 新关键帧与滑窗中老的关键帧之间创建新的地图点
+                CreateNewMapPoints(pNewKF);
+                mvpSlidingWindowKFs.emplace_back(pNewKF);
+                SlidingWindowBA();
+                if (mvpSlidingWindowKFs.size() < mSlidingWindowSize) {
+//                    mvpSlidingWindowKFs.emplace_back(pNewKF);
+                    // 同时，把新关键帧对应的mappoint插入到滑窗中
+                    for (auto *pMP: pNewKF->GetMapPoints()) {
+                        if (pMP)
+                            mspSlidingWindowMPs.insert(pMP);
+                    }
+                } else {
+                    // 从slidingWindow中删除旧的关键帧和地图点, 并插入新的关键帧。
+                    Marginalize();
+//                    mvpSlidingWindowKFs.emplace_back(pNewKF);
+                    // 更新地图点的滑窗，先清空，然后重新插入。
+                    mspSlidingWindowMPs.clear();
+                    for (auto *pKF: mvpSlidingWindowKFs) {
+                        auto vpMPs = pKF->GetMapPoints();
+                        for (auto *pMP: vpMPs) {
                             if (pMP)
                                 mspSlidingWindowMPs.insert(pMP);
                         }
-                    } else {
-                        // 从slidingWindow中删除旧的关键帧和地图点, 并插入新的关键帧。
-                        Marginalize();
-                        mvpSlidingWindowKFs.emplace_back(pNewKF);
-                        // 更新地图点的滑窗，先清空，然后重新插入。
-                        mspSlidingWindowMPs.clear();
-                        for (auto *pKF: mvpSlidingWindowKFs) {
-                            auto vpMPs = pKF->GetMapPoints();
-                            for (auto *pMP: vpMPs) {
-                                if (pMP)
-                                    mspSlidingWindowMPs.insert(pMP);
-                            }
-                        }
                     }
-                    mLastestKFImg = mImGray.clone();
-                    std::cout << "SlidingWindow KFs num: " << mvpSlidingWindowKFs.size()
-                              << "    MPs num: " << mspSlidingWindowMPs.size() << std::endl;
                 }
+                mLastestKFImg = mImGray.clone();
+                std::cout << "SlidingWindow KFs num: " << mvpSlidingWindowKFs.size()
+                          << "    MPs num: " << mspSlidingWindowMPs.size() << std::endl;
             }
-
-            UpdateVelocity();
         }
+
+        UpdateVelocity();
         mLastFrame = Frame(mCurrentFrame);
     }
 
@@ -180,83 +191,79 @@ namespace Naive_SLAM {
         return dist;
     }
 
-    std::vector<int> Estimator::SearchByProjection(const KeyFrame* pKF,
-                                                   const cv::Mat &Tcw) {
-        float radiusTh = 15.0;
-        std::vector<MapPoint*> pMPs = pKF->GetMapPoints();
-        cv::Mat Rcw = Tcw.rowRange(0, 3).colRange(0, 3);
-        cv::Mat tcw = Tcw.rowRange(0, 3).col(3);
-        std::vector<int> matchesIdx(pKF->N, -1);
-        int nMatches = 0;
-        int mpNum = 0;
-        for (int i = 0; i < pKF->N; i++) {
-            MapPoint *pMP = pMPs[i];
-            if (pMP) {
-                mpNum++;
-                cv::Mat pt3dw = pMP->GetWorldPos();
-                cv::Mat matDesc = pMP->GetDescription();
-                cv::Mat pt3dc = Rcw * pt3dw + tcw;
-                cv::Point2f pt2dUn = project(pt3dc);
-                if (pt2dUn.x >= mImgWidth || pt2dUn.x < 0 || pt2dUn.y < 0 || pt2dUn.y >= mImgHeight)
-                    continue;
-
-                int matchedId;
-                int level = pKF->GetKeyPointUn(i).octave;
-                float scaleFactor = pKF->GetScaleFactors()[level];
-                float radius = radiusTh * scaleFactor;
-                int minLevel = level - 1;
-                int maxLevel = level + 1;
-                int bestDist = Matcher::SearchGrid(pt2dUn, matDesc, mCurrentFrame,
-                                        radius, matchedId, minLevel, maxLevel);
-                if (bestDist < 50) {
-                    matchesIdx[i] = matchedId;
-                    nMatches++;
-                }
-            }
-        }
-        std::cout << "[SearchByProjection] MapPoint in Ref KF nums: " << mpNum << std::endl;
-        std::cout << "[SearchByProjection] MapPoint matched nums: " << nMatches << std::endl;
-        return matchesIdx;
-    }
-
     bool Estimator::TrackWithKeyFrame() {
         KeyFrame *lastestKF = mvpSlidingWindowKFs.back();
-        std::vector<MapPoint *> mapPointsInKF = lastestKF->GetMapPoints();
+        mvpCurrentTrackedMPs.clear();
+        mvpCurrentTrackedMPs.resize(mCurrentFrame.N, nullptr);
         cv::Mat frameTcw = mVelocity * mLastFrame.GetTcw();
         mCurrentFrame.SetT(frameTcw);
 
-//        DrawPoints(mCurrentFrame.mImg, mCurrentFrame.mvPointsUn,
-//                   mvpSlidingWindowKFs.back()->GetMapPoints(), mK, mDistCoef,
-//                   frameTcw.rowRange(0, 3).colRange(0, 3), frameTcw.rowRange(0, 3).col(3),
-//                   "Frame");
-
-        std::vector<int> matchesIdx = SearchByProjection(lastestKF, frameTcw);
-        std::vector<MapPoint *> mapPoints;
-//        std::vector<cv::Point2f> pointsUnMatched;
-        std::vector<cv::KeyPoint> vKPsUnMatched;
-        for (int i = 0; i < lastestKF->N; i++) {
-            if (matchesIdx[i] == -1)
-                continue;
-            mapPoints.emplace_back(mapPointsInKF[i]);
-            vKPsUnMatched.emplace_back(mCurrentFrame.mvKeyPointsUn[matchesIdx[i]]);
+        float radiusTh = 15;
+        std::vector<int> vMatches;
+        int nMatchesNum = Matcher::SearchByProjection(mCurrentFrame, lastestKF,
+                                                      mvpCurrentTrackedMPs, frameTcw, radiusTh);
+        if(nMatchesNum < 20){
+            nMatchesNum = Matcher::SearchByProjection(mCurrentFrame, lastestKF,
+                                                      mvpCurrentTrackedMPs, frameTcw, radiusTh*2);
         }
-        std::vector<bool> bOutlier;
-        std::vector<float> chi2s;
-        mnKeyFrameMatchInliers = Optimization::PoseOptimize(vKPsUnMatched, mapPoints,
-                                                            lastestKF->GetInvLevelSigma2(), mK,
-                                                            frameTcw, bOutlier, chi2s);
-        std::cout << "[TrackWithKeyFrame] g2o opt mnKeyFrameMatchInliers= "
-                  << mnKeyFrameMatchInliers << std::endl;
+        if(nMatchesNum >= 20){
+//            std::vector<MapPoint *> mapPoints;
+//            std::vector<cv::KeyPoint> vKPsUnMatched;
+//            for (int i = 0; i < lastestKF->N; i++) {
+//                if (vMatches[i] == -1)
+//                    continue;
+//                mapPoints.emplace_back(mapPointsInKF[i]);
+//                vKPsUnMatched.emplace_back(mCurrentFrame.mvKeyPointsUn[vMatches[i]]);
+//            }
+            std::vector<bool> bOutlier;
+            std::vector<float> chi2s;
+            mnKeyFrameMatchInliers = Optimization::PoseOptimize(mCurrentFrame.mvKeyPointsUn,
+                                                                mvpCurrentTrackedMPs,
+                                                                lastestKF->GetInvLevelSigma2(), mK,
+                                                                frameTcw, bOutlier, chi2s);
+            std::cout << "[Estimator::TrackWithKeyFrame] g2o opt mnKeyFrameMatchInliers= "
+                      << mnKeyFrameMatchInliers << std::endl;
 
-        mCurrentFrame.SetT(frameTcw);
+            if (mnKeyFrameMatchInliers >= 10) {
+                mCurrentFrame.SetT(frameTcw);
+                std::cout << "[Estimator::TrackWithKeyFrame] By Projection good" << std::endl;
+                DrawPoints(mCurrentFrame, mvpCurrentTrackedMPs);
+                return true;
+            }
+        }
 
-        // 画图
-        DrawPoints(mCurrentFrame, vKPsUnMatched, bOutlier, chi2s, mapPoints);
-
-        if (mnKeyFrameMatchInliers > 10) {
-            return true;
-        } else
-            return false;
+        if (nMatchesNum < 20 || mnKeyFrameMatchInliers < 10){
+            vMatches.clear();
+            nMatchesNum = Matcher::SearchByBow(lastestKF, mCurrentFrame, mvpCurrentTrackedMPs);
+            if(nMatchesNum < 15)
+                return false;
+//            std::vector<MapPoint *> mapPoints;
+//            std::vector<cv::KeyPoint> vKPsUnMatched;
+//            for (int i = 0; i < lastestKF->N; i++) {
+//                if (vMatches[i] == -1)
+//                    continue;
+//                mapPoints.emplace_back(mapPointsInKF[i]);
+//                vKPsUnMatched.emplace_back(mCurrentFrame.mvKeyPointsUn[vMatches[i]]);
+//            }
+            std::vector<bool> bOutlier;
+            std::vector<float> chi2s;
+            mnKeyFrameMatchInliers = Optimization::PoseOptimize(mCurrentFrame.mvKeyPointsUn,
+                                                                mvpCurrentTrackedMPs,
+                                                                lastestKF->GetInvLevelSigma2(), mK,
+                                                                frameTcw, bOutlier, chi2s);
+            std::cout << "[Estimator::TrackWithKeyFrame] g2o opt mnKeyFrameMatchInliers= "
+                      << mnKeyFrameMatchInliers << std::endl;
+            if(mnKeyFrameMatchInliers >=10){
+                std::cout << "[Estimator::TrackWithKeyFrame] By Bow good" << std::endl;
+                DrawPoints(mCurrentFrame, mvpCurrentTrackedMPs);
+                mCurrentFrame.SetT(frameTcw);
+                return true;
+            }
+            else{
+                return false;
+            }
+        }
+        return false;
     }
 
     cv::Point2f Estimator::project(const cv::Mat &pt3d) const {
@@ -267,47 +274,20 @@ namespace Naive_SLAM {
         return {x_un, y_un};
     }
 
-    int Estimator::SearchByProjection(std::vector<MapPoint *> &vMapPoints,
-                                      std::vector<cv::KeyPoint> &vKPsUn,
-                                      std::vector<int> &vMatchedIdx) {
-        vMatchedIdx.resize(mCurrentFrame.N, -1);
-        cv::Mat Tcw = mCurrentFrame.GetTcw();
-        cv::Mat Rcw = Tcw.rowRange(0, 3).colRange(0, 3);
-        cv::Mat tcw = Tcw.rowRange(0, 3).col(3);
-        int nMatches = 0;
-        for (const auto &pMP: mspSlidingWindowMPs) {
-            cv::Mat pt3dw = pMP->GetWorldPos();
-            cv::Mat matDesc = pMP->GetDescription();
-            cv::Mat pt3dc = Rcw * pt3dw + tcw;
-            cv::Point2f pt2dUn = project(pt3dc);
-            if (pt2dUn.x >= mImgWidth || pt2dUn.x < 0 || pt2dUn.y < 0 || pt2dUn.y >= mImgHeight)
-                continue;
-
-            int matchedId;
-            int bestDist = Matcher::SearchGrid(pt2dUn, matDesc, mCurrentFrame,
-                                               40, matchedId, 0, mnPyramidNum);
-            if (bestDist < 50) {
-                vKPsUn.emplace_back(mCurrentFrame.mvKeyPointsUn[matchedId]);
-                vMapPoints.emplace_back(pMP);
-                vMatchedIdx[matchedId] = nMatches;
-                nMatches++;
-            }
-        }
-        return nMatches;
-    }
-
     bool Estimator::TrackWithinSlidingWindow() {
-        std::vector<MapPoint *> vMapPointsMatched;
-//        std::vector<cv::Point2f> vPointsUnMatched;
-        std::vector<cv::KeyPoint> vKPsUnMatched;
-        std::vector<int> vMatchedIdx;
-        int nMatches = SearchByProjection(vMapPointsMatched, vKPsUnMatched, vMatchedIdx);
+//        std::vector<MapPoint *> vMapPointsMatched;
+//        std::vector<cv::KeyPoint> vKPsUnMatched;
+//        std::vector<int> vMatchedIdx;
+        int nMatches = Matcher::SearchByProjection(mCurrentFrame, mspSlidingWindowMPs,
+                                                   mvpCurrentTrackedMPs);
+//                                                   vMapPointsMatched, vKPsUnMatched, vMatchedIdx);
         std::cout << "[TrackWithinSlidingWindow] project matches num: " << nMatches << std::endl;
 
         cv::Mat frameTcw = mCurrentFrame.GetTcw();
         std::vector<bool> bOutlier;
         std::vector<float> chi2s;
-        mnSlidingWindowMatchInliers = Optimization::PoseOptimize(vKPsUnMatched,vMapPointsMatched,
+        mnSlidingWindowMatchInliers = Optimization::PoseOptimize(mCurrentFrame.mvKeyPointsUn,
+                                                                 mvpCurrentTrackedMPs,
                                                                  mCurrentFrame.mvInvLevelSigma2,
                                                                  mK, frameTcw, bOutlier, chi2s);
         std::cout << "[TrackWithinSlidingWindow] mnSlidingWindowMatchInliers="
@@ -316,32 +296,51 @@ namespace Naive_SLAM {
         mCurrentFrame.SetT(frameTcw);
 
         // 画图
-        DrawPoints(mCurrentFrame, vKPsUnMatched, bOutlier, chi2s, vMapPointsMatched);
+        DrawPoints(mCurrentFrame, mvpCurrentTrackedMPs);
         if (mnSlidingWindowMatchInliers > 30) {
-            mvpCurrentTrackedMPs.clear();
-            mvpCurrentTrackedMPs.resize(mCurrentFrame.N, nullptr);
-            for (int i = 0; i < mCurrentFrame.N; i++) {
-                if (vMatchedIdx[i] != -1 && !bOutlier[vMatchedIdx[i]]) {
-                    mvpCurrentTrackedMPs[i] = vMapPointsMatched[vMatchedIdx[i]];
-                }
-            }
+//            mvpCurrentTrackedMPs.clear();
+//            mvpCurrentTrackedMPs.resize(mCurrentFrame.N, nullptr);
+//            for (int i = 0; i < mCurrentFrame.N; i++) {
+//                if (vMatchedIdx[i] != -1 && !bOutlier[vMatchedIdx[i]]) {
+//                    mvpCurrentTrackedMPs[i] = vMapPointsMatched[vMatchedIdx[i]];
+//                }
+//            }
+            std::cout << "[Estimator::TrackWithinSlidingWindow] good" << std::endl;
             return true;
-        } else
+        } else{
+            std::cout << "[Estimator::TrackWithinSlidingWindow] bad" << std::endl;
             return false;
+        }
     }
 
     bool Estimator::NeedNewKeyFrame() {
-        if (mnSlidingWindowMatchInliers < 40) {
+        std::cout << "[Estimator::NeedNewKeyFrame] ";
+        int nMPNumInLastestKF = mvpSlidingWindowKFs.back()->GetMapPointNum();
+        if (mnKeyFrameMatchInliers < 20 || mnSlidingWindowMatchInliers < 0.5*nMPNumInLastestKF
+            || mbRelocalized) {
+            mbRelocalized = false;
+            std::cout << "Yes" << std::endl;
             return true;
-        } else
+        } else {
+            std::cout << "No" << std::endl;
             return false;
+        }
     }
 
     KeyFrame *Estimator::CreateKeyFrame() {
+        std::cout << "[Estimator::CreateKeyFrame] start" << std::endl;
         auto *pCurKF = new KeyFrame(mCurrentFrame);
         pCurKF->SetMapPoints(mvpCurrentTrackedMPs);
+        // 设置关键帧和地图点之间的观测关系
+        int nTrackedMPNum = 0;
+        for (int i = 0; i < pCurKF->N; i++){
+            if(mvpCurrentTrackedMPs[i]) {
+                mvpCurrentTrackedMPs[i]->AddObservation(pCurKF, i);
+                nTrackedMPNum++;
+            }
+        }
         pCurKF->ComputeBow();
-        std::cout << "[Estimator::CreateKeyFrame] done" << std::endl;
+        std::cout << "[Estimator::CreateKeyFrame] Tracked MP in new KF num=" << nTrackedMPNum << std::endl;
         return pCurKF;
     }
 
@@ -349,6 +348,8 @@ namespace Naive_SLAM {
      * 新关键帧与滑窗中的所有关键帧进行BoW匹配，对匹配点创建地图点。
      */
     void Estimator::CreateNewMapPoints(KeyFrame *pKF) {
+        std::cout << "[Estimator::CreateNewMapPoints] start" << std::endl;
+        int nNewMPNum = 0;
         for (auto *pKFSW: mvpSlidingWindowKFs) {
             pKFSW->ComputeBow();
             const DBoW2::FeatureVector &vFeatVec1 = pKF->GetFeatVec();
@@ -358,7 +359,6 @@ namespace Naive_SLAM {
             DBoW2::FeatureVector::const_iterator f1end = vFeatVec1.end();
             DBoW2::FeatureVector::const_iterator f2end = vFeatVec2.end();
 
-//            cv::Mat F12 = ComputeF12(pKF, pKFSW);
             cv::Mat F12 = pKF->ComputeFundamental(pKFSW);
 
             std::vector<bool> vbMatched2(pKFSW->N, false);
@@ -378,18 +378,20 @@ namespace Naive_SLAM {
                         for (size_t i2 = 0; i2 < f2it->second.size(); i2++) {
                             const size_t idx2 = f2it->second[i2];
                             MapPoint *pMP2 = pKFSW->GetMapPoint(idx2);
+
                             if (vbMatched2[idx2] || (pMP2 && !pMP2->IsBad()))
                                 continue;
+
                             cv::KeyPoint kp2Un = pKFSW->GetKeyPointUn(idx2);
                             cv::Mat description2 = pKFSW->GetDescription(idx2);
                             int dist = DescriptorDistance(description1, description2);
                             if (dist > bestDist)
                                 continue;
 
-                            if (Matcher::CheckDistEpipolarLine(kp1Un, kp2Un, F12)) {
+//                            if (Matcher::CheckDistEpipolarLine(kp1Un, kp2Un, F12)) {
                                 bestIdx2 = idx2;
                                 bestDist = dist;
-                            }
+//                            }
                         }
                         if (bestIdx2 >= 0) {
                             vMatched12[idx1] = bestIdx2;
@@ -437,35 +439,38 @@ namespace Naive_SLAM {
             P2 = mK * P2;
             cv::Mat points4D;
             cv::triangulatePoints(P1, P2, vPtsMatch1, vPtsMatch2, points4D);
+            std::cout << "[Estimator::CreateNewMapPoints] BoW matched num=" << vPtsMatch1.size() << std::endl;
 
             for (int i = 0; i < points4D.cols; i++) {
-                cv::Mat p3dC1 = points4D.col(i); // pKF1相机位姿下的坐标，需要转换到世界坐标系下。
-                p3dC1 = p3dC1.rowRange(0, 3) / p3dC1.at<float>(3);
-                if (p3dC1.at<float>(2) <= 0) {
-                    continue;
-                }
-                cv::Mat p3dC2 = R21 * p3dC1 + t21;
-                if (p3dC2.at<float>(2) <= 0) {
-                    continue;
-                }
-
                 int matchIdx1 = vIdxMatch12[i].first;
                 int matchIdx2 = vIdxMatch12[i].second;
+
+                cv::Mat p3dC1 = points4D.col(i); // pKF1相机位姿下的坐标，需要转换到世界坐标系下。
+                p3dC1 = p3dC1.rowRange(0, 3) / p3dC1.at<float>(3);
+                if(!CheckPt3DValid(p3dC1, pKF->GetKeyPointUn(matchIdx1).pt))
+                    continue;
+
+                cv::Mat p3dC2 = R21 * p3dC1 + t21;
+                if(!CheckPt3DValid(p3dC2, pKFSW->GetKeyPointUn(matchIdx2).pt))
+                    continue;
+
                 cv::Mat description = pKF->GetDescription(matchIdx1);
 
                 cv::Mat p3dW = Rw1 * p3dC1 + tw1;
-                auto *mapPoint = new MapPoint(p3dW, pKF);
-                mapPoint->SetDescription(description);
-                mapPoint->AddObservation(pKF, matchIdx1);
-                mapPoint->AddObservation(pKFSW, matchIdx2);
-                mpMap->AddMapPoint(mapPoint);
+                auto *pMPNew = new MapPoint(p3dW, pKF);
+                pMPNew->SetDescription(description);
+                pMPNew->AddObservation(pKF, matchIdx1);
+                pMPNew->AddObservation(pKFSW, matchIdx2);
+                mpMap->AddMapPoint(pMPNew);
 
-                pKF->AddMapPoint(matchIdx1, mapPoint);
-                pKFSW->AddMapPoint(matchIdx2, mapPoint);
-                mspSlidingWindowMPs.insert(mapPoint);
+                pKF->AddMapPoint(matchIdx1, pMPNew);
+                pKFSW->AddMapPoint(matchIdx2, pMPNew);
+                mspSlidingWindowMPs.insert(pMPNew);
+                nNewMPNum++;
             }
         }
-
+        std::cout << "[Estimator::CreateNewMapPoints] New MP num=" << nNewMPNum << std::endl;
+        std::cout << "[Estimator::CreateNewMapPoints] done" << std::endl;
     }
 
     void Estimator::SlidingWindowBA() {
@@ -475,6 +480,96 @@ namespace Naive_SLAM {
     void Estimator::Marginalize() {
         auto it = mvpSlidingWindowKFs.begin();
         mvpSlidingWindowKFs.erase(it);
+    }
+
+    bool Estimator::Relocalization() {
+        std::cout << "[Estimator::Relocalization] start" << std::endl;
+        mCurrentFrame.ComputeBow();
+        for(int i = mSlidingWindowSize - 2; i >= 0; i--){
+            KeyFrame* pKF = mvpSlidingWindowKFs[i];
+            std::vector<int> vMatches;
+            std::vector<MapPoint*> vpMapPoints(mCurrentFrame.N, nullptr);
+            int nMatchesNumBow = Matcher::SearchByBow(pKF, mCurrentFrame, vpMapPoints);
+            if(nMatchesNumBow < 15)
+                continue;
+//            std::vector<MapPoint *> mapPoints;
+//            std::vector<cv::KeyPoint> vKPsUnMatched;
+//            std::vector<cv::Point3f> vPts3D;
+//            std::vector<cv::Point2f> vPts2D;
+//            std::vector<int> vMatchIdx;
+//            for (int id = 0; id < mCurrentFrame.N; id++) {
+//                MapPoint* pMP = vpMapPoints[id];
+//                if (!pMP || pMP->IsBad())
+//                    continue;
+//                vMatchIdx.emplace_back(id);
+//                vPts3D.emplace_back(pMP->GetWorldPos());
+//                vPts2D.emplace_back(mCurrentFrame.mvKeyPointsUn[id].pt);
+//            }
+//            cv::Mat rcw, tcw, Rcw, Tcw, inliers;
+//            cv::solvePnPRansac(vPts3D, vPts2D, mK, cv::Mat::zeros(4, 1, CV_32F),
+//                               rcw, tcw, false, 100, 4, 0.99, inliers, cv::SOLVEPNP_EPNP);
+//            std::cout << "[Estimator::Relocalization] pnp inliers num=" << inliers.total() << std::endl;
+//            if(inliers.total() < 10)
+//                continue;
+//            cv::Rodrigues(rcw, Rcw);
+//            Rcw.convertTo(Rcw, CV_32F);
+//            tcw.convertTo(tcw, CV_32F);
+//            Tcw = cv::Mat::eye(4, 4, CV_32F);
+//            Rcw.copyTo(Tcw.rowRange(0, 3).colRange(0, 3));
+//            tcw.copyTo(Tcw.rowRange(0, 3).col(3));
+//            std::vector<int> vMatchIdx2, vMatches2(pKF->N, -1);
+//            for(int k = 0; k < inliers.total(); k++){
+//                mapPoints.emplace_back(pKF->GetMapPoint(vMatchIdx[inliers.at<int>(k)]));
+//                vKPsUnMatched.emplace_back(mCurrentFrame.mvKeyPointsUn[vMatches[vMatchIdx[inliers.at<int>(k)]]]);
+//                vMatchIdx2.emplace_back(vMatchIdx[inliers.at<int>(k)]);
+//                vMatches2[vMatchIdx[inliers.at<int>(k)]] = vMatches[vMatchIdx[inliers.at<int>(k)]];
+//            }
+            cv::Mat Tcw;
+            bool bPnP = Optimization::SolvePnP(mCurrentFrame.mvPointsUn, vpMapPoints, mK, Tcw);
+            if(!bPnP)
+                continue;
+
+            std::vector<bool> bOutlier;
+            std::vector<float> chi2s;
+            int nGood = Optimization::PoseOptimize(mCurrentFrame.mvKeyPointsUn, vpMapPoints,
+                                                   pKF->GetInvLevelSigma2(), mK,
+                                                   Tcw, bOutlier, chi2s);
+            if(nGood < 10)
+                continue;
+
+            if(nGood < 50){
+                int nMatchesNumProj = Matcher::SearchByProjection(mCurrentFrame, pKF,
+                                                                  vpMapPoints, Tcw, 15);
+                if(nGood + nMatchesNumProj >= 50){
+                    nGood = Optimization::PoseOptimize(mCurrentFrame.mvKeyPointsUn, vpMapPoints,
+                                                           pKF->GetInvLevelSigma2(), mK,
+                                                           Tcw, bOutlier, chi2s);
+                }
+            }
+            if(nGood >= 50){
+                mCurrentFrame.SetT(Tcw);
+                mbRelocalized = true;
+                std::cout << "[Estimator::Relocalization] done good" << std::endl;
+                return true;
+            }
+        }
+        std::cout << "[Estimator::Relocalization] done bad" << std::endl;
+        return false;
+    }
+
+    void Estimator::Reset() {
+
+    }
+
+    bool Estimator::CheckPt3DValid(const cv::Mat& pt3D, const cv::Point2f& ptUn) {
+        if(pt3D.at<float>(2) <= 0)
+            return false;
+        cv::Point2f ptProj = project(pt3D);
+        float dist = sqrt((ptProj.x - ptUn.x) * (ptProj.x - ptUn.x) +
+                          (ptProj.y - ptUn.y) * (ptProj.y - ptUn.y));
+        if (dist > 2)
+            return false;
+        return true;
     }
 
 }

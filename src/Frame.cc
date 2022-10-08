@@ -10,13 +10,14 @@
  */
 
 #include "Frame.h"
+#include "Converter.h"
 
 namespace Naive_SLAM {
 
+    long int Frame::mnNextId = 0;
     float Frame::fx, Frame::fy, Frame::cx, Frame::cy;
 
-
-    Frame::Frame(const Frame &frame) : N(frame.N), mTimeStamp(frame.mTimeStamp),
+    Frame::Frame(const Frame &frame) : mnId(frame.mnId), N(frame.N), mTimeStamp(frame.mTimeStamp),
                                        mpORBextractor(frame.mpORBextractor),
                                        mvKeyPoints(frame.mvKeyPoints),
                                        mvKeyPointsUn(frame.mvKeyPointsUn), mvPoints(frame.mvPoints),
@@ -24,6 +25,7 @@ namespace Naive_SLAM {
                                        mvL0KPIndices(frame.mvL0KPIndices),
                                        mvMapPointIndices(frame.mvMapPointIndices),
                                        mDescriptions(frame.mDescriptions.clone()),
+//                                       mvpMapPoints(frame.mvpMapPoints),
                                        mImg(frame.mImg.clone()),
                                        mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone()),
                                        mpORBVocabulary(frame.mpORBVocabulary),
@@ -54,6 +56,7 @@ namespace Naive_SLAM {
             mvScaleFactors(extractor->GetScaleFactors()),
             mvLevelSigma2(extractor->GetScaleSigmaSquares()),
             mvInvLevelSigma2(extractor->GetInverseScaleSigmaSquares()){
+        mnId = mnNextId++;
         fx = K.at<float>(0, 0);
         fy = K.at<float>(1, 1);
         cx = K.at<float>(0, 2);
@@ -61,16 +64,13 @@ namespace Naive_SLAM {
 
         ExtractORB(img);
         N = mvKeyPoints.size();
-        std::cout << "[Frame] ORB Extracted Num=" << N << std::endl;
         UndistortKeyPoints();
         for (size_t i = 0; i < mvKeyPoints.size(); i++) {
-//        cv::KeyPoint kpt = mvKeyPoints[i];
-//        if (kpt.octave == 0){
             mvL0KPIndices.emplace_back(i);
             mvPoints.emplace_back(mvKeyPoints[i].pt);
             mvPointsUn.emplace_back(mvKeyPointsUn[i].pt);
-//        }
         }
+//        mvpMapPoints.resize(N, nullptr);
 
 
         mRcw = cv::Mat::eye(3, 3, CV_32F);
@@ -79,7 +79,6 @@ namespace Naive_SLAM {
         mtwc = cv::Mat::zeros(3, 1, CV_32F);
 
 
-//    mGrid = std::vector<std::vector<std::vector<std::size_t>>>(mGridRows, std::vector<std::vector<std::size_t>>(mGridCols, std::vector<std::size_t>(0)));
         mGrid = new std::vector<size_t> *[mGridRows];
         for (int i = 0; i < mGridRows; i++) {
             mGrid[i] = new std::vector<size_t>[mGridCols];
@@ -130,9 +129,25 @@ namespace Naive_SLAM {
         }
     }
 
-//std::vector<std::vector<std::vector<std::size_t>>> Frame::GetGrid() {
-//    return mGrid;
-//}
+    void Frame::ComputeBow(){
+        if(mBowVector.empty() || mFeatVector.empty()){
+            std::vector<cv::Mat> vDesc = Converter::DescriptionMatToVector(mDescriptions);
+            mpORBVocabulary->transform(vDesc, mBowVector, mFeatVector, 4);
+        }
+    }
+
+    DBoW2::BowVector Frame::GetBowVec() const {
+        return mBowVector;
+    }
+
+    DBoW2::FeatureVector Frame::GetFeatVec() const {
+        return mFeatVector;
+    }
+
+    cv::Mat Frame::GetDescription(int id) const {
+        return mDescriptions.row(id);
+    }
+
     std::vector<std::size_t> **Frame::GetGrid() const {
         return mGrid;
     }

@@ -38,7 +38,8 @@ namespace Naive_SLAM {
         enum State {
             NO_IMAGE = 0,
             NOT_INITIALIZED = 1,
-            OK = 2
+            OK = 2,
+            LOST = 3
         };
 
 
@@ -93,6 +94,8 @@ namespace Naive_SLAM {
         std::vector<MapPoint *> mvpCurrentTrackedMPs;
         Initializer* mpInitializer;
 
+        bool mbRelocalized;
+
     private:
 
         int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
@@ -101,13 +104,6 @@ namespace Naive_SLAM {
         void UpdateVelocity(const cv::Mat& lastTwc, const cv::Mat& currTcw);
 
         bool TrackWithKeyFrame();
-
-        std::vector<int>
-        SearchByProjection(const KeyFrame* pKF, const cv::Mat &Tcw);
-
-        int
-        SearchByProjection(std::vector<MapPoint *> &vMapPoints, std::vector<cv::KeyPoint> &vKPsUn,
-                           std::vector<int> &vMatchedIdx);
 
         cv::Point2f project(const cv::Mat &pt3d) const;
 
@@ -122,6 +118,13 @@ namespace Naive_SLAM {
         void SlidingWindowBA();
 
         void Marginalize();
+
+        bool Relocalization();
+
+        void Reset();
+
+        bool CheckPt3DValid(const cv::Mat& pt3D, const cv::Point2f& ptUn);
+
     };
 }
 #endif

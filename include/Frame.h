@@ -36,6 +36,8 @@ public:
 
 
 public:
+    static long int mnNextId;
+    long int mnId;
     int N;
     double mTimeStamp;
     
@@ -48,6 +50,7 @@ public:
     std::vector<int> mvL0KPIndices;
     std::vector<int> mvMapPointIndices; // 每一个关键点对应的地图点的索引
     cv::Mat mDescriptions;
+//    std::vector<MapPoint*> mvpMapPoints;
 
     cv::Mat mImg;
 
@@ -58,6 +61,8 @@ public:
     static float cy;
     cv::Mat mDistCoef;
     Vocabulary *mpORBVocabulary;
+    DBoW2::BowVector mBowVector;
+    DBoW2::FeatureVector mFeatVector;
 
 
 public:
@@ -76,6 +81,10 @@ public:
     void SetTranslation(const cv::Mat& tcw);
     void SetT(const cv::Mat& Tcw);
     void SetT(const cv::Mat& Rcw, const cv::Mat& tcw);
+    void ComputeBow();
+    DBoW2::BowVector GetBowVec() const;
+    DBoW2::FeatureVector GetFeatVec() const;
+    cv::Mat GetDescription(int id) const;
 
 private:
     void UndistortKeyPoints();

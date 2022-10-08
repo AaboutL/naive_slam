@@ -13,12 +13,15 @@ namespace Naive_SLAM{
 
 class Optimization{
 public:
-    static int PoseOptimize(const std::vector<cv::KeyPoint>& vKPsUn, const std::vector<MapPoint*>& mapPoints,
+    static int PoseOptimize(const std::vector<cv::KeyPoint>& vKPsUn, std::vector<MapPoint*>& mapPoints,
                              const std::vector<float>& vInvLevelSigma2,
                              const cv::Mat& matK, cv::Mat& Tcw, std::vector<bool>& outlier,
                              std::vector<float>& chi2s);
 
     static void SlidingWindowBA(std::vector<KeyFrame*>& vKFs, const cv::Mat& matK);
+//    static bool SolvePnP(Frame& frame, std::vector<MapPoint*>& vpMapPoints, cv::Mat& Tcw);
+    static bool SolvePnP(const std::vector<cv::Point2f>& vPtsUn, std::vector<MapPoint*>& vpMapPoints,
+                         const cv::Mat& K, cv::Mat& Tcw);
 };
 
 }

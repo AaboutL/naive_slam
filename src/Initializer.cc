@@ -84,7 +84,6 @@ bool Initializer::Initialize(std::vector<KeyFrame*>& vpKFs, std::set<MapPoint*>&
         mpKeyFrameDB->AddKeyFrame(mvpSlidingWindowKFs[startId]);
     }
     vKFs.emplace_back(mvpSlidingWindowKFs[lastKFId]);
-//    InitBetweenKFs(vKFs);
     mpKeyFrameDB->AddKeyFrame(mvpSlidingWindowKFs[lastKFId]);
     Optimization::SlidingWindowBA(vKFs, mK);
     int goodMPNum = 0, goodMPNumInKF = 0;
@@ -101,11 +100,6 @@ bool Initializer::Initialize(std::vector<KeyFrame*>& vpKFs, std::set<MapPoint*>&
     }
     std::cout << "[Initializer::Initialize] after slidingWindow BA, good mappoints num="
               << goodMPNum << "  good mappoint in lastest KF num=" << goodMPNumInKF << std::endl;
-
-//    DrawPoints(mStartImg, mvpSlidingWindowKFs.back()->GetPointsUn(),
-//               mvpSlidingWindowKFs.back()->GetMapPoints(), mK, mDistCoef,
-//               mvpSlidingWindowKFs.back()->GetRotation(),
-//               mvpSlidingWindowKFs.back()->GetTranslation(), "KeyFrame");
 
     mpMap->InsertMapPoints(mspSlidingWindowMPs);
     vpKFs = mvpSlidingWindowKFs;
@@ -125,9 +119,9 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
             pKFi->SetT(R21, t21);
             cv::Mat points4D = Triangulate(linkInfo.mvPoints1, linkInfo.mvPoints2, R21, t21);
 
-            int negNum = 0;
             for(int id = 0; id < pStartKF->N; id++){
-                if(linkInfo.mvMatchesBetweenKF[id] == -1)
+                int matchedId = linkInfo.mvMatchesBetweenKF[id];
+                if(matchedId == -1)
                     continue;
 
                 // 判断重投影误差
@@ -135,33 +129,22 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
                 pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
 
                 //判断三维点的深度值是否为正，即是否在相机前方
-                if(pt3D.at<float>(2) <= 0) {
-                    negNum++;
+                if(!CheckPt3DValid(pt3D, pStartKF->GetKeyPointUn(id).pt))
                     continue;
-                }
-
-                cv::Point2f ptProj = project(pt3D);
-                cv::Point2f pt = pStartKF->GetKeyPointUn(id).pt;
-                float dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                                  (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                if (dist > 2) continue;
 
                 cv::Mat pt3Di = R21 * pt3D + t21;
-                ptProj = project(pt3Di);
-                pt = pKFi->GetKeyPointUn(linkInfo.mvMatchesBetweenKF[id]).pt;
-                dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                            (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                if (dist > 2) continue;
+                if(!CheckPt3DValid(pt3Di, pKFi->GetKeyPointUn(matchedId).pt))
+                    continue;
 
                 cv::Mat description = pStartKF->GetDescription(id);
-                auto* mapPoint = new MapPoint(pt3D, pStartKF);
-                mapPoint->SetDescription(description);
-                mapPoint->AddObservation(pStartKF, id);
-                mapPoint->AddObservation(pKFi, linkInfo.mvMatchesBetweenKF[id]);
+                auto* pMPNew = new MapPoint(pt3D, pStartKF);
+                pMPNew->SetDescription(description);
+                pMPNew->AddObservation(pStartKF, id);
+                pMPNew->AddObservation(pKFi, matchedId);
 
-                pStartKF->AddMapPoint(id, mapPoint);
-                pKFi->AddMapPoint(linkInfo.mvMatchesBetweenKF[id], mapPoint);
-                mspSlidingWindowMPs.insert(mapPoint);
+                pStartKF->AddMapPoint(id, pMPNew);
+                pKFi->AddMapPoint(matchedId, pMPNew);
+                mspSlidingWindowMPs.insert(pMPNew);
             }
 
             std::vector<int> vMatches, vMatchIdx;
@@ -174,37 +157,37 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
             cv::Mat points4DNew = Triangulate(vPts1, vPts2,
                                               pKFi->GetRotation(), pKFi->GetTranslation());
 
-            negNum = 0;
             std::vector<MapPoint*> vpMPs;
             for(int id = 0; id < pStartKF->N; id++){
                 if(vMatchIdx[id] != -1){
                     cv::Mat pt3D = points4DNew.col(vMatchIdx[id]);
                     pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
-                    if(pt3D.at<float>(2) <= 0) {
-                        negNum++;
+                    if(!CheckPt3DValid(pt3D, pStartKF->GetKeyPointUn(id).pt))
                         continue;
-                    }
-                    cv::Mat description = pStartKF->GetDescription(id);
-                    auto* mapPoint = new MapPoint(pt3D, pStartKF);
-                    mapPoint->SetDescription(description);
-                    mapPoint->AddObservation(pStartKF, id);
-                    mapPoint->AddObservation(pKFi, vMatches[id]);
 
-                    pStartKF->AddMapPoint(id, mapPoint);
-                    pKFi->AddMapPoint(vMatches[id], mapPoint);
-                    mspSlidingWindowMPs.insert(mapPoint);
-                    vpMPs.emplace_back(mapPoint);
+                    cv::Mat pt3Di = R21 * pt3D + t21;
+                    if(!CheckPt3DValid(pt3Di, pKFi->GetKeyPointUn(vMatches[id]).pt))
+                        continue;
+
+
+                    cv::Mat description = pStartKF->GetDescription(id);
+                    auto* pMPNew = new MapPoint(pt3D, pStartKF);
+                    pMPNew->SetDescription(description);
+                    pMPNew->AddObservation(pStartKF, id);
+                    pMPNew->AddObservation(pKFi, vMatches[id]);
+
+                    pStartKF->AddMapPoint(id, pMPNew);
+                    pKFi->AddMapPoint(vMatches[id], pMPNew);
+                    mspSlidingWindowMPs.insert(pMPNew);
+                    vpMPs.emplace_back(pMPNew);
                 }
             }
-            std::cout << "[Initializer::CoarseInit] BoW neg z num=" << negNum << std::endl;
             std::cout << "[Initialize::CoarseInit] mappoint in SW num="
                       << mspSlidingWindowMPs.size() << std::endl;
 
             DrawPoints(mKFImgs[linkInfo.mnLinkId], pKFi->GetPointsUn(), vpMPs, mK,
                        mDistCoef, pKFi->GetRotation(), pKFi->GetTranslation(), "BoW MP", 2);
 
-            PrintMat("pKFi", pKFi->GetTcw());
-            std::cout << "[Initializer::CoarseInit] pt3D neg z num=" << negNum << std::endl;
             std::vector<KeyFrame*> vKFsForBA{pStartKF, pKFi};
             Optimization::SlidingWindowBA(vKFsForBA, mK);
 
@@ -212,8 +195,7 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
         }
     }
     else{ // 其他匹配对，先通过PnP求位姿，然后三角化其他匹配对
-        std::vector<cv::Point3f> vPts3D;
-        std::vector<cv::Point2f> vPts2D;
+        std::vector<MapPoint*> vpMapPoints(pKFi->N, nullptr);
         for(int id = 0; id < pStartKF->N; id++){
             int matchedId = linkInfo.mvMatchesBetweenKF[id];
             if(matchedId == -1)
@@ -222,49 +204,30 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
             if(!pMP)
                 continue;
 
-            // 把地图点转换到StartKF的相机坐标系中
-            cv::Mat worldPos = pMP->GetWorldPos();
-            cv::Mat startPos = pStartKF->GetRotation() * worldPos + pStartKF->GetTranslation();
-            vPts3D.emplace_back(cv::Point3f(startPos.at<float>(0), startPos.at<float>(1), startPos.at<float>(2)));
-            cv::Point2f matchedPt2D = pKFi->GetKeyPointUn(matchedId).pt;
-            vPts2D.emplace_back(matchedPt2D);
+            vpMapPoints[matchedId] = pMP;
         }
 
-        cv::Mat R21, r21, t21, inliers;
-        // 先尝试pnp
-        std::cout << "[Initializer::CoarseInit] 3D 2D match num=" << vPts3D.size() << std::endl;
-        if(!vPts3D.empty() && !vPts2D.empty()) {
-            // 局部坐标系下，第二帧相对于第一帧的位姿
-            cv::solvePnPRansac(vPts3D, vPts2D, mK, cv::Mat::zeros(4, 1, CV_32F),
-                               r21, t21, false, 100, 4, 0.99, inliers, cv::SOLVEPNP_EPNP);
-            std::cout << "[Initializer::CoarseInit] matches with MapPoint num=" << vPts2D.size()
-                      << "  PnP inliers num=" << inliers.total() << std::endl;
-        }
-        if(!inliers.empty() && inliers.total() >= 10){
-            cv::Rodrigues(r21, R21);
-            R21.convertTo(R21, CV_32F);
-            t21.convertTo(t21, CV_32F);
-
-            // 根据pnp求出的当前帧的初始位姿
-            cv::Mat Ri0, ti0;
-            Ri0 = R21 * pStartKF->GetRotation();
-            ti0 = R21 * pStartKF->GetTranslation() + t21;
-            pKFi->SetT(Ri0, ti0);
+        cv::Mat R21, r21, t21, Tiw, inliers;
+        bool bPnP = Optimization::SolvePnP(pKFi->GetPointsUn(), vpMapPoints, mK, Tiw);
+        if(bPnP){
+            pKFi->SetT(Tiw);
+            R21 = pKFi->GetRotation() * pStartKF->GetRotationInv();
+            t21 = pKFi->GetTranslation() - R21 * pStartKF->GetTranslation();
 
             // 对匹配点进行三角化，并检查有效性；都是在局部坐标系中（前一帧的坐标系）
             cv::Mat points4D = Triangulate(linkInfo.mvPoints1, linkInfo.mvPoints2, R21, t21);
             std::cout << "[Initializer::CoarseInit] KLT match num=" << linkInfo.mvPoints1.size() << std::endl;
             int newMPNum = 0, existMPNum=0;
-            int negNum = 0;
             for(int id = 0; id < pStartKF->N; id++){
-                if(linkInfo.mvMatchesBetweenKF[id]==-1)
+                int matchedId = linkInfo.mvMatchesBetweenKF[id];
+                if(matchedId == -1)
                     continue;
 
-                MapPoint* pMP = pStartKF->GetMapPoint(id);
+                MapPoint* pMP = vpMapPoints[matchedId];
                 if(pMP){
                     if(!pMP->IsBad()) {
-                        pMP->AddObservation(pKFi, linkInfo.mvMatchesBetweenKF[id]);
-                        pKFi->AddMapPoint(linkInfo.mvMatchesBetweenKF[id], pMP);
+                        pMP->AddObservation(pKFi, matchedId);
+                        pKFi->AddMapPoint(matchedId, pMP);
                         existMPNum++;
                     }
                 }
@@ -272,65 +235,56 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
                     // 判断三角化的点在两帧上的重投影误差
                     cv::Mat pt3D = points4D.col(linkInfo.mvKPIdToMatchedId[id]);
                     pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
-
-                    if(pt3D.at<float>(2) <= 0) {
-                        negNum++;
+                    if(!CheckPt3DValid(pt3D, pStartKF->GetKeyPointUn(id).pt))
                         continue;
-                    }
-
-                    cv::Point2f ptProj = project(pt3D);
-                    cv::Point2f pt = pStartKF->GetKeyPointUn(id).pt;
-                    float dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                                      (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                    if (dist > 2) continue;
 
                     cv::Mat pt3Di = R21 * pt3D + t21;
-                    ptProj = project(pt3Di);
-                    pt = pKFi->GetKeyPointUn(linkInfo.mvMatchesBetweenKF[id]).pt;
-                    dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                                (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                    if (dist > 2) continue;
+                    if(!CheckPt3DValid(pt3Di, pKFi->GetKeyPointUn(matchedId).pt))
+                        continue;
 
+                    cv::Mat pt3DW = pStartKF->GetRotationInv() * pt3D + pStartKF->GetCameraCenter();
                     // 转换到初始帧的坐标系中。从前一帧的相机坐标系转换到世界坐标系
-                    cv::Mat pt3D0 = pStartKF->GetRotationInv() * pt3D + pStartKF->GetCameraCenter();
-
                     cv::Mat description = pStartKF->GetDescription(id);
-                    auto *pMPNew = new MapPoint(pt3D0, pStartKF); // 创建地图点，并设置坐标和参考关键帧
-                    pMPNew->SetDescription(description);
-                    pMPNew->AddObservation(pStartKF, id);
-                    pMPNew->AddObservation(pKFi, linkInfo.mvMatchesBetweenKF[id]);
+                    if(!pStartKF->GetMapPoint(id)) {
+                        auto *pMPNew = new MapPoint(pt3DW, pStartKF); // 创建地图点，并设置坐标和参考关键帧
+                        pMPNew->SetDescription(description);
+                        pMPNew->AddObservation(pStartKF, id);
+                        pMPNew->AddObservation(pKFi, matchedId);
 
-                    pStartKF->AddMapPoint(id, pMPNew);
-                    pKFi->AddMapPoint(linkInfo.mvMatchesBetweenKF[id], pMPNew);
-                    mspSlidingWindowMPs.insert(pMPNew);
-                    newMPNum++;
+                        pStartKF->AddMapPoint(id, pMPNew);
+                        pKFi->AddMapPoint(matchedId, pMPNew);
+                        vpMapPoints[matchedId] = pMPNew;
+//                        mspSlidingWindowMPs.insert(pMPNew);
+                        newMPNum++;
+                    }
+                    else{
+                        // pStartKF中存在pMP，说明这个点是PnP求解中的outlier。
+                        continue;
+                    }
                 }
             }
-            std::cout << "[Initializer::CoarseInit] pt3D neg z num=" << negNum << std::endl;
             std::cout << "[Initializer::CoarseInit] newMPNum=" << newMPNum
                       << " existMPNum=" << existMPNum << std::endl;
         }
         else{
             if(SolveRelativePose(linkInfo.mvPoints1, linkInfo.mvPoints2, R21, t21) >= 12){
                 cv::Mat points4D = Triangulate(linkInfo.mvPoints1, linkInfo.mvPoints2, R21, t21);
-                cv::Mat Ri0, ti0;
-                Ri0 = R21 * pStartKF->GetRotation();
-                ti0 = R21 * pStartKF->GetTranslation() + t21;
-                pKFi->SetT(Ri0, ti0);
-                // 三角化后的点转换到世界坐标系中
-//                points4D = TransformPoints(points4D, pKFi->GetTwc());
-//                cv::Mat points4DW = TransformPoints(points4D, pStartKF->GetTwc());
+                cv::Mat Riw, tiw;
+                Riw = R21 * pStartKF->GetRotation();
+                tiw = R21 * pStartKF->GetTranslation() + t21;
+                pKFi->SetT(Riw, tiw);
 
                 int negNum=0;
                 for(int id = 0; id < pStartKF->N; id++){
-                    if(linkInfo.mvMatchesBetweenKF[id] == -1)
+                    int matchedId = linkInfo.mvMatchesBetweenKF[id];
+                    if(matchedId == -1)
                         continue;
 
                     MapPoint* pMP = pStartKF->GetMapPoint(id);
                     if(pMP){
                         if(!pMP->IsBad()) {
-                            pMP->AddObservation(pKFi, linkInfo.mvMatchesBetweenKF[id]);
-                            pKFi->AddMapPoint(linkInfo.mvMatchesBetweenKF[id], pMP);
+                            pMP->AddObservation(pKFi, matchedId);
+                            pKFi->AddMapPoint(matchedId, pMP);
                         }
                     }
                     else {
@@ -339,34 +293,24 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
                         cv::Mat pt3D = points4D.col(linkInfo.mvKPIdToMatchedId[id]);
                         pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
 
-                        if (pt3D.at<float>(2) <= 0){
-                            negNum++;
+                        if(!CheckPt3DValid(pt3D, pStartKF->GetKeyPointUn(id).pt))
                             continue;
-                        }
-
-                        cv::Point2f ptProj = project(pt3D);
-                        cv::Point2f pt = pStartKF->GetKeyPointUn(id).pt;
-                        float dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                                          (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                        if (dist > 2) continue;
 
                         cv::Mat pt3Di = R21 * pt3D + t21;
-                        ptProj = project(pt3Di);
-                        pt = pKFi->GetKeyPointUn(linkInfo.mvMatchesBetweenKF[id]).pt;
-                        dist = sqrt((ptProj.x - pt.x) * (ptProj.x - pt.x) +
-                                    (ptProj.y - pt.y) * (ptProj.y - pt.y));
-                        if (dist > 2) continue;
+                        if(!CheckPt3DValid(pt3Di, pKFi->GetKeyPointUn(matchedId).pt))
+                            continue;
 
-                        cv::Mat pt3D0 = pStartKF->GetRotationInv() * pt3D + pStartKF->GetCameraCenter();
+                        cv::Mat pt3DW = pStartKF->GetRotationInv() * pt3D + pStartKF->GetCameraCenter();
                         cv::Mat description = pStartKF->GetDescription(id);
-                        auto *mapPoint = new MapPoint(pt3D0, pStartKF);
-                        mapPoint->SetDescription(description);
-                        mapPoint->AddObservation(pStartKF, id);
-                        mapPoint->AddObservation(pKFi, linkInfo.mvMatchesBetweenKF[id]);
+                        auto *pMPNew = new MapPoint(pt3DW, pStartKF);
+                        pMPNew->SetDescription(description);
+                        pMPNew->AddObservation(pStartKF, id);
+                        pMPNew->AddObservation(pKFi, matchedId);
 
-                        pStartKF->AddMapPoint(id, mapPoint);
-                        pKFi->AddMapPoint(linkInfo.mvMatchesBetweenKF[id], mapPoint);
-                        mspSlidingWindowMPs.insert(mapPoint);
+                        pStartKF->AddMapPoint(id, pMPNew);
+                        pKFi->AddMapPoint(matchedId, pMPNew);
+                        vpMapPoints[matchedId] = pMPNew;
+//                        mspSlidingWindowMPs.insert(pMPNew);
                     }
                 }
                 std::cout << "[Initializer::CoarseInit] pt3D neg z num=" << negNum << std::endl;
@@ -382,79 +326,63 @@ void Initializer::CoarseInit(int startId, const LinkInfo& linkInfo) {
         int nBowMatchNum = Matcher::CollectMatches(pStartKF, pKFi, F12, vMatches, vMatchIdx,
                                                    vPts1, vPts2);
         std::cout << "[Initializer::CoarseInit] BoW match num=" << nBowMatchNum << std::endl;
-        cv::Mat R21_tmp = pKFi->GetRotation() * pStartKF->GetRotationInv();
-        cv::Mat t21_tmp = pKFi->GetTranslation() - R21_tmp * pStartKF->GetTranslation();
         cv::Mat points4DNew = Triangulate(vPts1, vPts2, R21, t21);
-        cv::Mat points4DW = TransformPoints(points4DNew, pStartKF->GetTwc());
-        int negNum = 0;
-        std::vector<MapPoint*> vpMPs;
         for(int id = 0; id < pStartKF->N; id++){
             if(vMatchIdx[id] != -1){
                 cv::Mat pt3D = points4DNew.col(vMatchIdx[id]);
                 pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
-                if(pt3D.at<float>(2) <= 0) {
-                    negNum++;
-                    continue;
-                }
-                pt3D = points4DW.col(vMatchIdx[id]);
-                pt3D = pt3D.rowRange(0, 3) / pt3D.at<float>(3);
-                cv::Mat description = pStartKF->GetDescription(id);
-                auto* mapPoint = new MapPoint(pt3D, pStartKF);
-                mapPoint->SetDescription(description);
-                mapPoint->AddObservation(pStartKF, id);
-                mapPoint->AddObservation(pKFi, vMatches[id]);
 
-                pStartKF->AddMapPoint(id, mapPoint);
-                pKFi->AddMapPoint(vMatches[id], mapPoint);
-                mspSlidingWindowMPs.insert(mapPoint);
-                vpMPs.emplace_back(mapPoint);
+                if(!CheckPt3DValid(pt3D, pStartKF->GetKeyPointUn(id).pt))
+                    continue;
+
+                cv::Mat pt3Di = R21 * pt3D + t21;
+                if(!CheckPt3DValid(pt3Di, pKFi->GetKeyPointUn(vMatches[id]).pt))
+                    continue;
+
+                cv::Mat pt3DW = pStartKF->GetRotationInv() * pt3D + pStartKF->GetCameraCenter();
+                cv::Mat description = pStartKF->GetDescription(id);
+                auto* pMPNew = new MapPoint(pt3DW, pStartKF);
+                pMPNew->SetDescription(description);
+                pMPNew->AddObservation(pStartKF, id);
+                pMPNew->AddObservation(pKFi, vMatches[id]);
+
+                pStartKF->AddMapPoint(id, pMPNew);
+                pKFi->AddMapPoint(vMatches[id], pMPNew);
+                vpMapPoints[vMatches[id]] = pMPNew;
             }
         }
-        DrawPoints(mKFImgs[linkInfo.mnLinkId], pKFi->GetPointsUn(), vpMPs, mK,
+        DrawPoints(mKFImgs[linkInfo.mnLinkId], pKFi->GetPointsUn(), vpMapPoints, mK,
                    mDistCoef, pKFi->GetRotation(), pKFi->GetTranslation(), "BoW MP", 2);
-        std::cout << "[Initializer::CoarseInit] pt3D neg z num=" << negNum << std::endl;
         std::cout << "MapPoints Num in SW after BoW match: " << mspSlidingWindowMPs.size() << std::endl;
 
-        // 初始R、t得到后，用g2o进行优化
-        std::vector<cv::KeyPoint> vKPsUn;
-        std::vector<MapPoint*> vMPs;
-        for (int i = 0; i < pKFi->N; i++){
-            MapPoint* pMP = pKFi->GetMapPoint(i);
-            if(pMP){
-                vMPs.emplace_back(pMP);
-                vKPsUn.emplace_back(pKFi->GetKeyPointUn(i));
-            }
-        }
-        cv::Mat Tcw = pKFi->GetTcw();
-        PrintMat("Tcw before g2o:", Tcw);
+        Tiw = pKFi->GetTcw();
         std::vector<bool> vOutlier;
         std::vector<float> vChi2;
-        std::cout << "[Initializer::CoarseInit] MapPoints num before g2o: " << vMPs.size()
-                  << " corr points num: " << vKPsUn.size() << std::endl;
 
-        // vOutlier与vMPs的顺序对应，与帧中的关键点顺序不对应
-        int inliers_num = Optimization::PoseOptimize(vKPsUn, vMPs, pKFi->GetInvLevelSigma2(),
-                                                     mK, Tcw, vOutlier, vChi2);
-        std::cout << "[Initializer::CoarseInit] MapPoints num after g2o: " << inliers_num << std::endl;
-        pKFi->SetT(Tcw);
-        PrintMat("Tcw after g2o:", Tcw);
+        Optimization::PoseOptimize(pKFi->GetKeyPointsUn(), vpMapPoints, pKFi->GetInvLevelSigma2(),
+                                   mK, Tiw, vOutlier, vChi2);
+        pKFi->SetT(Tiw);
 
         std::cout << "MapPoints Num in SW before: " << mspSlidingWindowMPs.size() << std::endl;
         int outlierNum = 0;
         for(int i = 0; i < vOutlier.size(); i++){
-            MapPoint* pMP = vMPs[i];
-            if(vOutlier[i]/* || vChi2[i] > 4*/){
-                mspSlidingWindowMPs.erase(pMP);
+            MapPoint* pMP = vpMapPoints[i];
+            if(!pMP)
+                continue;
+            if(vOutlier[i]){
+                vpMapPoints[i] = nullptr;
                 pKFi->EraseMapPoint(pMP);
                 pMP->EraseObservation(pKFi);
                 outlierNum++;
-                std::cout << "outlier id=" << i << " chi=" << vChi2[i] << std::endl;
+                continue;
             }
+            mspSlidingWindowMPs.insert(pMP);
         }
+
         int MPNum = 0;
         for(int i = 0; i < pKFi->N; i++){
             MapPoint* pMP = pKFi->GetMapPoint(i);
-            if(pMP/* && !pMP->IsBad()*/)
+            if(pMP)
                 MPNum++;
         }
         std::cout << "MP num=" << MPNum << std::endl;
@@ -609,18 +537,29 @@ void Initializer::InitBetweenKFs(vector<KeyFrame *> &vKFs) {
                 }
 
                 cv::Mat description = pStartKF->GetDescription(vIdxInKF1[k]);
-                auto *mapPoint = new MapPoint(pt3D, pStartKF);
-                mapPoint->SetDescription(description);
-                mapPoint->AddObservation(pStartKF, vIdxInKF1[k]);
-                mapPoint->AddObservation(pKF, vIdxInKF2[k]);
+                auto *pMPNew = new MapPoint(pt3D, pStartKF);
+                pMPNew->SetDescription(description);
+                pMPNew->AddObservation(pStartKF, vIdxInKF1[k]);
+                pMPNew->AddObservation(pKF, vIdxInKF2[k]);
 
-                pStartKF->AddMapPoint(vIdxInKF1[k], mapPoint);
-                pKF->AddMapPoint(vIdxInKF2[k], mapPoint);
-                mspSlidingWindowMPs.insert(mapPoint);
+                pStartKF->AddMapPoint(vIdxInKF1[k], pMPNew);
+                pKF->AddMapPoint(vIdxInKF2[k], pMPNew);
+                mspSlidingWindowMPs.insert(pMPNew);
             }
         }
     }
 
+}
+
+bool Initializer::CheckPt3DValid(const cv::Mat& pt3D, const cv::Point2f& ptUn) {
+    if(pt3D.at<float>(2) <= 0)
+        return false;
+    cv::Point2f ptProj = project(pt3D);
+    float dist = sqrt((ptProj.x - ptUn.x) * (ptProj.x - ptUn.x) +
+                      (ptProj.y - ptUn.y) * (ptProj.y - ptUn.y));
+    if (dist > 2)
+        return false;
+    return true;
 }
 
 } // namespace Naive_SLAM

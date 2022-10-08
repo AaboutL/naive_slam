@@ -24,11 +24,7 @@ void DrawPoints(const cv::Mat& img, const std::vector<cv::Point2f>& pointsDet,
                 const std::vector<cv::Point2f>& pointsTracked, const std::vector<bool>& bOutlier,
                 const cv::Mat& mK, const cv::Mat& distCoff);
 
-void DrawPoints(const Frame& frame,
-                const std::vector<cv::KeyPoint>& pointsTracked1, const std::vector<bool>& bOutlier1,
-                const std::vector<float>& chi2s, const std::vector<MapPoint*>& mapPoints,
-                const std::vector<cv::Point2f>& pointsTracked2 = std::vector<cv::Point2f>(),
-                const std::vector<bool>& bOutlier2 = std::vector<bool>());
+void DrawPoints(const Frame& frame, const std::vector<MapPoint*>& vpMapPoints);
 
 void DrawPoints(const cv::Mat& img, const std::vector<cv::Point2f>& vPts,
                 const std::vector<MapPoint*>& vMPs,

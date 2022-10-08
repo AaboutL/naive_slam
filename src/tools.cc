@@ -53,7 +53,7 @@ namespace Naive_SLAM{
         }
         cv::putText(imgShow, std::to_string(num), cv::Point(20, 20), 1, 1, cv::Scalar(255, 0, 0));
         cv::imshow(winName, imgShow);
-        cv::waitKey(0);
+        cv::waitKey(30);
     }
 
     void DrawPoints(const cv::Mat& img, const std::vector<cv::Point2f>& pointsDet,
@@ -85,71 +85,36 @@ namespace Naive_SLAM{
         cv::putText(imgShow, "Total tracked points: " + std::to_string(n), cv::Point(20, 35), 1, 1, cv::Scalar(255, 0, 0));
         cv::putText(imgShow, "Inlier points: " + std::to_string(numInliers), cv::Point(20, 20), 1, 1, cv::Scalar(255, 0, 0));
         cv::imshow("Track", imgShow);
-        cv::waitKey(0);
+        cv::waitKey(30);
     }
 
-    void DrawPoints(const Frame& frame,
-                    const std::vector<cv::KeyPoint>& pointsTracked1, const std::vector<bool>& bOutlier1,
-                    const std::vector<float>& chi2s, const std::vector<MapPoint*>& mapPoints,
-                    const std::vector<cv::Point2f>& pointsTracked2,
-                    const std::vector<bool>& bOutlier2){
+    void DrawPoints(const Frame& frame, const std::vector<MapPoint*>& vpMapPoints){
         cv::Mat imgUn, imgShow;
         cv::undistort(frame.mImg, imgUn, frame.mK, frame.mDistCoef);
         cv::cvtColor(imgUn, imgShow, cv::COLOR_GRAY2BGR);
 
         cv::Mat Rcw = frame.GetRotation();
         cv::Mat tcw = frame.GetTranslation();
-        std::vector<cv::Point2f> projPoints;
-        for (auto* pMP:mapPoints){
-            cv::Mat pt3dcam = Rcw * pMP->GetWorldPos() + tcw;
-            cv::Point2f pt = projectPoint(pt3dcam, frame.mK);
-            projPoints.emplace_back(pt);
-        }
 
-        // 画出所有检测的点
-        for(int i = 0; i < frame.mvPointsUn.size(); i++) {
-            cv::circle(imgShow, frame.mvPointsUn[i], 5, cv::Scalar(255, 0, 0));
-        }
-
-        // 画出第一次优化的点
         int numInliers = 0;
-        int n = pointsTracked1.size();
-        for(int i = 0; i < n; i++){
-            if(!bOutlier1[i]){
-                cv::rectangle(imgShow, pointsTracked1[i].pt - cv::Point2f(2, 2), pointsTracked1[i].pt + cv::Point2f(2, 2),
-                              cv::Scalar(0, 255, 0));
-                cv::circle(imgShow, projPoints[i], 3, cv::Scalar(0, 255, 0));
+        for(int i = 0; i < frame.N; i++) {
+            MapPoint* pMP = vpMapPoints[i];
+            if(!pMP)
+                cv::circle(imgShow, frame.mvPointsUn[i], 5, cv::Scalar(255, 0, 0));
+            else{
+                cv::Mat pt3dcam = Rcw * pMP->GetWorldPos() + tcw;
+                cv::Point2f ptProj = projectPoint(pt3dcam, frame.mK);
+                cv::rectangle(imgShow, frame.mvPointsUn[i] - cv::Point2f(2, 2),
+                              frame.mvPointsUn[i] + cv::Point2f(2, 2), cv::Scalar(0, 255, 0));
+                cv::circle(imgShow, ptProj, 3, cv::Scalar(0, 255, 0));
                 numInliers++;
             }
-            else{
-                cv::circle(imgShow, pointsTracked1[i].pt, 5, cv::Scalar(0, 0, 255));
-                cv::circle(imgShow, projPoints[i], 3, cv::Scalar(0, 0, 255));
-                cv::putText(imgShow, std::to_string(int(chi2s[i])), pointsTracked1[i].pt + cv::Point2f(2, 2), 1, 1,
-                            cv::Scalar(0, 0, 255));
-            }
         }
-        cv::putText(imgShow, "Total extracted points: " + std::to_string(frame.mvPointsUn.size()), cv::Point(20, 15), 1, 1, cv::Scalar(0, 0, 255));
-        cv::putText(imgShow, "Total frist tracked points: " + std::to_string(n), cv::Point(20, 30), 1, 1, cv::Scalar(0, 0, 255));
-        cv::putText(imgShow, "First inlier points: " + std::to_string(numInliers), cv::Point(20, 45), 1, 1, cv::Scalar(0, 0, 255));
 
-        // 画出第二次投影匹配的点
-        if(pointsTracked2.empty()) {
-            int numInliers2 = 0;
-            for (int i = 0; i < pointsTracked2.size(); i++) {
-                if (!bOutlier2[i]) {
-                    cv::circle(imgShow, pointsTracked2[i], 3, cv::Scalar(0, 255, 255));
-                    numInliers2++;
-                } else {
-                    cv::circle(imgShow, pointsTracked2[i], 3, cv::Scalar(255, 0, 255));
-                }
-            }
-            cv::putText(imgShow, "Total second tracked points: " + std::to_string(pointsTracked2.size()), cv::Point(20, 60),
-                        1, 1, cv::Scalar(0, 0, 255));
-            cv::putText(imgShow, "Second inlier points: " + std::to_string(numInliers2), cv::Point(20, 75), 1, 1,
-                        cv::Scalar(0, 0, 255));
-        }
+        cv::putText(imgShow, "inlier points: " + std::to_string(numInliers), cv::Point(20, 45), 1, 1, cv::Scalar(0, 0, 255));
+
         cv::imshow("Track", imgShow);
-        cv::waitKey(0);
+        cv::waitKey(30);
     }
 
     void DrawPoints(const cv::Mat& img, const std::vector<cv::Point2f>& vPts,
@@ -172,7 +137,6 @@ namespace Naive_SLAM{
                 if(!vMPs[i]->IsBad()) {
                     cv::Mat mPt3D = Rcw * vMPs[i]->GetWorldPos() + tcw;
                     if(mPt3D.at<float>(2) <= 0) {
-                        std::cout << "z is neg" << std::endl;
                         continue;
                     }
                     cv::Point2f ptProj = projectPoint(mPt3D, mK);
@@ -189,7 +153,7 @@ namespace Naive_SLAM{
         cv::putText(imgShow, "tracked MP num: " + std::to_string(mpsNum), cv::Point(20, 20), 1, 1,
                     cv::Scalar(255, 0, 0));
         cv::imshow(winName, imgShow);
-        cv::waitKey(0);
+        cv::waitKey(30);
     }
 
     void DrawPoints(const cv::Mat& img, const KeyFrame* pKF,
@@ -204,7 +168,6 @@ namespace Naive_SLAM{
         std::vector<cv::Point2f> vPts = pKF->GetPointsUn();
         std::vector<MapPoint*> vMPs = pKF->GetMapPoints();
         // 画出所有检测的点
-        std::cout << "[tool] vPts size=" << vPts.size() << std::endl;
         for (int i = 0; i < vPts.size(); i++) {
             cv::circle(imgShow, vPts[i], 5, cv::Scalar(255, 0, 0));
         }
@@ -216,7 +179,7 @@ namespace Naive_SLAM{
                 if(!vMPs[i]->IsBad()) {
                     cv::Mat mPt3D = Rcw * vMPs[i]->GetWorldPos() + tcw;
                     if(mPt3D.at<float>(2) <= 0) {
-                        std::cout << "z is neg" << std::endl;
+//                        std::cout << "z is neg" << std::endl;
                         continue;
                     }
                     cv::Point2f ptProj = projectPoint(mPt3D, mK);
@@ -224,15 +187,6 @@ namespace Naive_SLAM{
                                   cv::Scalar(0, 255, 0));
                     if(vMPs.size() == vPts.size() && !chi2.empty()){
                         cv::Point2f ptUn = vPts[i];
-                        std::cout << "[tools::DrawPoints] id=" << i
-                                  << " error=" << ptProj - ptUn
-                                  << "  pt octave=" <<pKF->GetKeyPointUn(i).octave
-                                  << "  pt=" << ptUn << "  ptproj=" << ptProj
-                                  << "  MP world=" << vMPs[i]->GetWorldPos().at<float>(0)
-                                  << ' ' << vMPs[i]->GetWorldPos().at<float>(1) << ' '
-                                  << vMPs[i]->GetWorldPos().at<float>(2) << "  MP Cur="
-                                  << mPt3D.at<float>(0) << ' ' << mPt3D.at<float>(1) << ' '
-                                  << mPt3D.at<float>(2) << std::endl;
                         cv::circle(imgShow, ptUn, 3, cv::Scalar(0, 255, 0));
                     }
                     mpsNum++;
@@ -242,7 +196,7 @@ namespace Naive_SLAM{
         cv::putText(imgShow, "mpsNum: " + std::to_string(mpsNum), cv::Point(20, 20), 1, 1,
                     cv::Scalar(255, 0, 0));
         cv::imshow(winName, imgShow);
-        cv::waitKey(0);
+        cv::waitKey(30);
     }
 
     void PrintMat(const std::string& msg, const cv::Mat& mat){

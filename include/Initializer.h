@@ -45,6 +45,7 @@ public:
     bool ReadyToInit();
     void DealWithUnused();
     void InitBetweenKFs(std::vector<KeyFrame*>& vKFs);
+    bool CheckPt3DValid(const cv::Mat& pt3D, const cv::Point2f& ptUn);
 
 private:
     int mnSlidingWindowSize;
